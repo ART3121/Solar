@@ -7,6 +7,9 @@ this development changelog.
 
 ### Added
 
+- Generic Synthesis Statistics collected from Yosys `stat -top`, including a
+  typed Solar Core API, per-field availability, generic cell usage, persistent
+  report round-tripping, and preservation of the original text artifact.
 - Linux x86_64 CPack release archives, a checksum-validating `~/.local`
   installer with safe upgrade/uninstall behavior, and tag-gated draft release
   automation for `ART3121/solar`.
@@ -23,6 +26,9 @@ this development changelog.
 
 ### Changed
 
+- `solar report` now presents Generic Synthesis Statistics with aligned
+  metadata, compact narrow-terminal wrapping, explicit metric/value and
+  cell/count tables, and cleaner continuation lines.
 - The product version is `0.4.5`; project manifest format remains `2` and no
   manifest migration is required from Solar 0.4.0.
 - The public SAPHO initializer is now `solar init --template sapho`; the old

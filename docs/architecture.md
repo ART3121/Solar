@@ -154,6 +154,8 @@ load and validate project
 -> generate deterministic Yosys script
 -> run Yosys
 -> verify netlist and statistics report
+-> parse Generic Synthesis Statistics
+-> publish the untouched text report and typed result
 ```
 
 Test sources, test include directories, and test defines cannot enter the
@@ -227,6 +229,14 @@ collected while writing and are excluded from the operation duration.
 `solar report` performs no probes and simply reads this persisted evidence.
 Host data is deliberately limited to hostname, OS/kernel/architecture, CPU
 model/count, memory, page size, and the compiler/build type used for Solar.
+
+The synthesis-statistics parser is a separate Core module. It prefers the
+Yosys `design hierarchy` summary when present, otherwise accumulates module
+sections once, and records a presence bit for each numeric field. The
+normalized schema is embedded in the atomic last-build report, so old reports
+without the section remain readable and return unavailable statistics through
+the public API. Parsing is optional enrichment: an unrecognized optional
+statistics format does not invalidate a successfully generated netlist.
 
 ## Generated-data safety
 

@@ -1009,6 +1009,152 @@ static void write_configuration(FILE *file, const SolarBuildContext *context)
     solar_effective_config_free(&effective);
 }
 
+static void write_statistics_value(
+    FILE *file,
+    const char *label,
+    const SolarGenericSynthesisStatistics *statistics,
+    SolarSynthesisStatisticsField field,
+    uint64_t value
+)
+{
+    if (solar_synthesis_statistics_has_field(statistics, field)) {
+        (void)fprintf(file, "  %-32s %12" PRIu64 "\n", label, value);
+    } else {
+        (void)fprintf(file, "  %-32s %12s\n", label, "not reported");
+    }
+}
+
+static const char *statistics_status(
+    const SolarBuildContext *context,
+    const SolarGenericSynthesisStatistics *statistics
+)
+{
+    if (!context->has_synthesis_result ||
+        context->synthesis_result.result.status != SOLAR_STATUS_OK ||
+        !statistics->available) {
+        return "NOT AVAILABLE";
+    }
+    return statistics->completeness == SOLAR_SYNTHESIS_STATISTICS_COMPLETE
+        ? "COMPLETE" : "PARTIAL";
+}
+
+static void write_statistics_metadata(
+    FILE *file,
+    const char *label,
+    const char *value
+)
+{
+    const size_t width = 54U;
+    const char *cursor = value == NULL ? "not reported" : value;
+    bool first = true;
+
+    do {
+        size_t remaining = strlen(cursor);
+        size_t length = remaining;
+
+        if (length > width) {
+            size_t split = width - 1U;
+
+            while (split > 0U && cursor[split] != ' ' &&
+                   cursor[split] != '/') {
+                split--;
+            }
+            length = split > 0U ? split + 1U : width;
+        }
+        (void)fprintf(
+            file, "  %-20s %.*s\n", first ? label : "",
+            (int)length, cursor
+        );
+        cursor += length;
+        first = false;
+    } while (*cursor != '\0');
+}
+
+static void write_synthesis_statistics(
+    FILE *file,
+    const SolarBuildContext *context
+)
+{
+    const SolarGenericSynthesisStatistics *statistics =
+        &context->synthesis_result.statistics;
+    size_t index;
+
+    write_section(file, "GENERIC SYNTHESIS STATISTICS");
+    write_statistics_metadata(
+        file, "Status", statistics_status(context, statistics)
+    );
+    write_statistics_metadata(file, "Tool",
+        statistics->tool == NULL ? "Yosys" : statistics->tool);
+    write_statistics_metadata(file, "Version", statistics->tool_version);
+    write_statistics_metadata(file, "Top",
+        statistics->top == NULL
+            ? context->project.config.synthesis.top : statistics->top);
+    write_statistics_metadata(
+        file, "Source", statistics->report_path
+    );
+    write_statistics_metadata(
+        file, "Data schema", "solar-generic-synthesis-statistics/1"
+    );
+    if (!statistics->available) {
+        if (context->has_synthesis_result &&
+            context->synthesis_result.result.status != SOLAR_STATUS_OK) {
+            write_statistics_metadata(file, "Reason", "synthesis failed");
+        } else if (context->has_synthesis_result &&
+                   context->synthesis_result.statistics_result.status !=
+                       SOLAR_STATUS_OK) {
+            write_statistics_metadata(
+                file, "Reason",
+                context->synthesis_result.statistics_result.diagnostic.message
+            );
+        } else {
+            write_statistics_metadata(file, "Reason", "synthesis was not run");
+        }
+        return;
+    }
+    (void)fprintf(
+        file,
+        "\n  DESIGN SUMMARY\n"
+        "  %-32s %12s\n"
+        "  -------------------------------- ------------\n",
+        "Metric", "Value"
+    );
+    write_statistics_value(file, "Modules", statistics,
+        SOLAR_SYNTHESIS_FIELD_MODULES, statistics->modules);
+    write_statistics_value(file, "Wires", statistics,
+        SOLAR_SYNTHESIS_FIELD_WIRES, statistics->wires);
+    write_statistics_value(file, "Wire bits", statistics,
+        SOLAR_SYNTHESIS_FIELD_WIRE_BITS, statistics->wire_bits);
+    write_statistics_value(file, "Public wires", statistics,
+        SOLAR_SYNTHESIS_FIELD_PUBLIC_WIRES, statistics->public_wires);
+    write_statistics_value(file, "Public wire bits", statistics,
+        SOLAR_SYNTHESIS_FIELD_PUBLIC_WIRE_BITS, statistics->public_wire_bits);
+    write_statistics_value(file, "Memories", statistics,
+        SOLAR_SYNTHESIS_FIELD_MEMORIES, statistics->memories);
+    write_statistics_value(file, "Memory bits", statistics,
+        SOLAR_SYNTHESIS_FIELD_MEMORY_BITS, statistics->memory_bits);
+    write_statistics_value(file, "Processes", statistics,
+        SOLAR_SYNTHESIS_FIELD_PROCESSES, statistics->processes);
+    write_statistics_value(file, "Cells", statistics,
+        SOLAR_SYNTHESIS_FIELD_CELLS, statistics->cells);
+    (void)fprintf(
+        file,
+        "\n  CELL USAGE\n"
+        "  %-32s %12s\n"
+        "  -------------------------------- ------------\n",
+        "Cell type", "Count"
+    );
+    if (statistics->cell_type_count == 0U) {
+        (void)fprintf(file, "  %-32s %12s\n", "-", "not reported");
+    }
+    for (index = 0U; index < statistics->cell_type_count; index++) {
+        (void)fprintf(
+            file, "  %-32s %12" PRIu64 "\n",
+            statistics->cell_types[index].type,
+            statistics->cell_types[index].count
+        );
+    }
+}
+
 static bool simulation_uses_cocotb(
     const SolarBuildContext *context,
     const SolarTestResult *simulation
@@ -1271,6 +1417,8 @@ SolarResult solar_build_report_write(const SolarBuildContext *context)
 
     write_section(file, "TIMING BREAKDOWN");
     write_stage_results(file, context);
+
+    write_synthesis_statistics(file, context);
 
     write_section(file, "ARTIFACTS");
     write_context_artifacts(file, context);

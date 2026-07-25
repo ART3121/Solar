@@ -1,0 +1,38 @@
+=== helper ===
+   Number of wires: 5
+   Number of wire bits: 8
+   Number of public wires: 1
+   Number of public wire bits: 1
+   Number of memories: 0
+   Number of memory bits: 0
+   Number of processes: 0
+   Number of cells: 1
+     $not 1
+
+=== top ===
+   Number of wires: 10
+   Number of wire bits: 20
+   Number of public wires: 3
+   Number of public wire bits: 4
+   Number of memories: 0
+   Number of memory bits: 0
+   Number of processes: 0
+   Number of cells: 3
+     helper 1
+     $add 2
+
+=== design hierarchy ===
+   top 1
+     helper 1
+
+   Number of wires: 18
+   Number of wire bits: 42
+   Number of public wires: 4
+   Number of public wire bits: 5
+   Number of memories: 0
+   Number of memory bits: 0
+   Number of processes: 0
+   Number of cells: 7
+     $dff 4
+     $add 2
+     $not 1

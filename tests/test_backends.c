@@ -239,11 +239,44 @@ int main(int argc, char **argv)
         );
         failed = failure("backend arguments or RTL-only Yosys script were incorrect");
     }
+    if (!synthesis_result.statistics.available ||
+        synthesis_result.statistics_result.status != SOLAR_STATUS_OK ||
+        synthesis_result.statistics.modules != 1U ||
+        synthesis_result.statistics.wires != 3U ||
+        synthesis_result.statistics.cells != 2U ||
+        synthesis_result.statistics.cell_type_count != 2U ||
+        synthesis_result.statistics.tool_version == NULL ||
+        strstr(synthesis_result.statistics.tool_version, "Yosys 0.test") == NULL ||
+        synthesis_result.statistics.report_path == NULL ||
+        strcmp(
+            synthesis_result.statistics.report_path,
+            synthesis_result.report_path
+        ) != 0) {
+        failed = failure("Yosys Generic Synthesis Statistics were not collected");
+    }
+    if (setenv("SOLAR_BACKEND_BAD_STATISTICS", "1", 1) != 0) {
+        failed = failure("could not configure malformed Yosys statistics");
+    } else {
+        solar_synthesis_result_free(&synthesis_result);
+        result = solar_synthesis_run(&project, NULL, &synthesis_result);
+        (void)unsetenv("SOLAR_BACKEND_BAD_STATISTICS");
+        if (result.status != SOLAR_STATUS_OK ||
+            synthesis_result.statistics.available ||
+            synthesis_result.statistics_result.status !=
+                SOLAR_STATUS_CONFIG_ERROR ||
+            synthesis_result.netlist_path == NULL ||
+            synthesis_result.report_path == NULL) {
+            failed = failure(
+                "optional statistics parsing incorrectly failed synthesis"
+            );
+        }
+    }
 
 cleanup:
     if (old_path != NULL) (void)setenv("PATH", old_path, 1);
     else (void)unsetenv("PATH");
     (void)unsetenv("SOLAR_BACKEND_RECORD");
+    (void)unsetenv("SOLAR_BACKEND_BAD_STATISTICS");
     solar_synthesis_result_free(&synthesis_result);
     solar_rtl_build_result_free(&rtl_result);
     solar_test_result_free(&test_result);

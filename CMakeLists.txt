@@ -120,6 +120,7 @@ add_library(solar_core STATIC
     src/core/cocotb.c
     src/core/test.c
     src/core/synthesis.c
+    src/core/synthesis_statistics.c
     src/core/system.c
     src/core/waveform.c
     src/core/runner.c
@@ -300,6 +301,17 @@ if(BUILD_TESTING)
     add_executable(test_backends tests/test_backends.c)
     target_link_libraries(test_backends PRIVATE solar_core solar_warnings)
     add_test(NAME backends COMMAND test_backends $<TARGET_FILE:backend_helper>)
+
+    add_executable(
+        test_synthesis_statistics tests/test_synthesis_statistics.c
+    )
+    target_link_libraries(
+        test_synthesis_statistics PRIVATE solar_core solar_warnings
+    )
+    target_compile_definitions(test_synthesis_statistics PRIVATE
+        SOLAR_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/yosys"
+    )
+    add_test(NAME synthesis_statistics COMMAND test_synthesis_statistics)
 
     add_executable(test_verilator tests/test_verilator.c)
     target_link_libraries(test_verilator PRIVATE solar_core solar_warnings)

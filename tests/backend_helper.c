@@ -107,10 +107,24 @@ int main(int argc, char **argv)
         const char *report = structured
             ? "statistics.txt"
             : ".solar/tmp/synth/statistics.txt";
+        const char *statistics = getenv("SOLAR_BACKEND_BAD_STATISTICS") == NULL
+            ? "=== counter ===\n"
+              " Number of wires: 3\n"
+              " Number of wire bits: 10\n"
+              " Number of public wires: 2\n"
+              " Number of public wire bits: 9\n"
+              " Number of memories: 0\n"
+              " Number of memory bits: 0\n"
+              " Number of processes: 0\n"
+              " Number of cells: 2\n"
+              "   $add 1\n"
+              "   $dff 1\n"
+            : "Yosys returned no recognizable stat section\n";
 
         free(working_directory);
+        (void)printf("Yosys 0.test (fake backend)\n");
         if (write_file(netlist, "module counter; endmodule\n") != 0 ||
-            write_file(report, "fake synthesis report\n") != 0) {
+            write_file(report, statistics) != 0) {
             return 74;
         }
         return 0;
