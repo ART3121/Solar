@@ -4,6 +4,7 @@
 #include "solar/compiler.h"
 #include "solar/project.h"
 #include "solar/result.h"
+#include "solar/synthesis_statistics.h"
 
 #include <stdint.h>
 
@@ -12,6 +13,8 @@ typedef struct {
     char *script_path;
     char *netlist_path;
     char *report_path;
+    SolarGenericSynthesisStatistics statistics;
+    SolarResult statistics_result;
     uint64_t duration_ns;
     SolarResult result;
 } SolarSynthesisResult;

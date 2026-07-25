@@ -44,6 +44,22 @@ planned stages without starting external tools.
 
 Automatic GUI launch is never part of a build command.
 
+### Generic Synthesis Statistics
+
+When the last operation completed Yosys synthesis, `solar report` includes a
+**Generic Synthesis Statistics** section. It records the producing Yosys
+version and top, every available design-summary counter, and cell types sorted
+by descending count then alphabetically. A reported zero is distinct from
+`not reported`.
+
+The section is normalized and persisted when the build report is written.
+`solar report` never starts Yosys or reparses a live backend log. The original
+`statistics.txt` remains a registered public artifact and the complete Yosys
+stdout/stderr remain below `.solar/logs/`.
+
+The data does not estimate FPGA LUTs, ALMs, DSPs, utilization percentages,
+timing closure, placement, routing, or bitstreams.
+
 ## Exit status classes
 
 | Exit | Meaning |

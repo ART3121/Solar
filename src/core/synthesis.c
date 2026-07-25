@@ -5,9 +5,13 @@
 #include "solar/compiler.h"
 #include "solar/filesystem.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 void solar_synthesis_request_init(SolarSynthesisRequest *request)
 {
@@ -37,6 +41,8 @@ void solar_synthesis_result_init(SolarSynthesisResult *result)
     if (result == NULL) return;
     (void)memset(result, 0, sizeof(*result));
     result->result = solar_result_ok();
+    result->statistics_result = solar_result_ok();
+    solar_synthesis_statistics_init(&result->statistics);
 }
 
 void solar_synthesis_result_free(SolarSynthesisResult *result)
@@ -46,6 +52,7 @@ void solar_synthesis_result_free(SolarSynthesisResult *result)
     free(result->script_path);
     free(result->netlist_path);
     free(result->report_path);
+    solar_synthesis_statistics_free(&result->statistics);
     solar_synthesis_result_init(result);
 }
 
@@ -368,6 +375,85 @@ static SolarResult publish_synthesis_outputs(
     return result;
 }
 
+static char *read_yosys_version(const char *log_path)
+{
+    int descriptor;
+    FILE *file;
+    struct stat information;
+    char *line = NULL;
+    size_t capacity = 0U;
+    char *version = NULL;
+
+    descriptor = open(log_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (descriptor < 0) return NULL;
+    if (fstat(descriptor, &information) != 0 ||
+        !S_ISREG(information.st_mode) || information.st_size < 0 ||
+        information.st_size > (off_t)16 * 1024 * 1024) {
+        (void)close(descriptor);
+        return NULL;
+    }
+    file = fdopen(descriptor, "r");
+    if (file == NULL) {
+        (void)close(descriptor);
+        return NULL;
+    }
+    while (getline(&line, &capacity, file) >= 0) {
+        char *start = line;
+        char *end;
+
+        while (*start == ' ' || *start == '\t') start++;
+        if (strncmp(start, "Yosys ", 6U) != 0 ||
+            !isdigit((unsigned char)start[6]) || strlen(line) > 4096U) {
+            continue;
+        }
+        end = start + strcspn(start, "\r\n");
+        *end = '\0';
+        version = strdup(start);
+        break;
+    }
+    free(line);
+    (void)fclose(file);
+    return version;
+}
+
+static SolarResult set_statistics_metadata(
+    const SolarSynthesisRequest *request,
+    SolarSynthesisResult *synthesis_result
+)
+{
+    SolarGenericSynthesisStatistics *statistics =
+        &synthesis_result->statistics;
+    SolarResult result;
+
+    result = copy_string(&statistics->tool, "Yosys");
+    if (result.status == SOLAR_STATUS_OK) {
+        statistics->tool_version = read_yosys_version(request->stdout_log);
+        result = copy_string(&statistics->top, request->top);
+    }
+    if (result.status == SOLAR_STATUS_OK) {
+        result = copy_string(
+            &statistics->report_path, synthesis_result->report_path
+        );
+    }
+    return result;
+}
+
+static void collect_synthesis_statistics(
+    const SolarSynthesisRequest *request,
+    SolarSynthesisResult *synthesis_result
+)
+{
+    SolarResult metadata_result;
+
+    synthesis_result->statistics_result = solar_synthesis_statistics_analyze(
+        synthesis_result->report_path, &synthesis_result->statistics
+    );
+    metadata_result = set_statistics_metadata(request, synthesis_result);
+    if (metadata_result.status != SOLAR_STATUS_OK) {
+        synthesis_result->statistics_result = metadata_result;
+    }
+}
+
 SolarResult solar_synthesis_run_with_artifacts(
     const SolarProject *project,
     const char *profile_name,
@@ -421,10 +507,17 @@ SolarResult solar_synthesis_run_with_artifacts(
             project, profile, &request, synthesis_result
         );
     }
+    if (result.status == SOLAR_STATUS_OK) {
+        collect_synthesis_statistics(&request, synthesis_result);
+    }
     solar_synthesis_request_free(&request);
 
 cleanup:
     solar_compiler_result_free(&compiler_result);
+    if (result.status != SOLAR_STATUS_OK &&
+        synthesis_result->statistics_result.status == SOLAR_STATUS_OK) {
+        synthesis_result->statistics_result = result;
+    }
     synthesis_result->result = result;
     return result;
 }

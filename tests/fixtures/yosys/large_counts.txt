@@ -1,0 +1,9 @@
+=== huge ===
+ Number of wires: 18446744073709551615
+ Number of wire bits: 18446744073709551615
+ Number of public wires: 18446744073709551615
+ Number of public wire bits: 18446744073709551615
+ Number of memories: 18446744073709551615
+ Number of memory bits: 18446744073709551615
+ Number of processes: 18446744073709551615
+ Number of cells: 0

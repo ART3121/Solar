@@ -106,6 +106,16 @@ records generated public files so `solar clean` never owns arbitrary user
 files.
 
 ## Documentation and manual
+## Generic Synthesis Statistics
+
+After a successful Yosys synthesis, Solar analyzes the dedicated `stat -top`
+artifact and stores a typed **Generic Synthesis Statistics** snapshot in the
+last-build report. `solar report` shows reported design totals and cell usage.
+Missing optional fields are shown as `not reported`, not zero. The original
+Yosys text remains available as `synth/statistics.txt` for Verilog projects or
+`hardware/statistics.txt` for SAPHO projects. These are generic Yosys cells and
+structures, not FPGA resource estimates or place-and-route data.
+
 
 - [Solar website](https://art3121.github.io/Site-Solar/)
 - [User manual](https://art3121.github.io/Site-Solar/docs/)
@@ -115,6 +125,7 @@ files.
 - [Project configuration](https://art3121.github.io/Site-Solar/docs/#project)
 - [Troubleshooting](https://art3121.github.io/Site-Solar/docs/#troubleshooting)
 - [Architecture](docs/architecture.md)
+- [Solar Core API](docs/api.md)
 - [Testing and release evidence](docs/testing.md)
 
 The Solar website is the public entry point for documentation. Release

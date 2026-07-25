@@ -1,0 +1,20 @@
+Yosys 0.46 (git sha1 123456789)
+Extra line before statistics.
+
+=== counter ===
+
+   Number of wires:                 38
+   Number of wire bits:            126
+   Number of public wires:          12
+   Number of public wire bits:      34
+   Number of memories:               1
+   Number of memory bits:          256
+   Number of processes:              0
+   Number of cells:                 24
+     $add                            2
+     $not                            4
+     $and                            4
+     $mux                            6
+     $dff                            8
+
+Extra line after statistics.

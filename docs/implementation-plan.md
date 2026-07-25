@@ -1594,3 +1594,68 @@ tentativa invalida altera `solar.toml`.
 - Uma copia temporaria de `examples/counter` executou `solar scan` e
   `solar check`; o manifesto publicou `top = "counter"`, dois testes e o check
   apresentou `basic`/`counter_tb` como selecao padrao.
+# Generic Synthesis Statistics (2026-07-25)
+
+## Current state
+
+- Yosys already runs a deterministic `stat -top <top>` command through
+  `tee -o statistics.txt`, publishes the original text report, and preserves
+  complete stdout/stderr logs.
+- `SolarSynthesisResult` currently exposes only paths, duration, and status.
+  `.solar/state/last-report.txt` is the persistent, human-readable report and
+  older reports contain no structured synthesis-statistics section.
+
+## Decisions
+
+- Add a focused Core module and public API for generic Yosys statistics; keep
+  parsing, ownership, persistence, and ordering outside the CLI and backend.
+- Track presence per numeric field with a bitmask so an absent value is never
+  rendered as zero. Bound input size, line size, cell-name length, and cell
+  type count, and reject overflowing or malformed reported numbers.
+- Prefer Yosys's `design hierarchy` summary when present. Otherwise aggregate
+  module sections exactly once. Infer the module count from unique module
+  headers because ordinary Yosys `stat` output does not emit that field.
+- Store a versioned normalized block in `last-report.txt`, followed by the
+  readable `Generic Synthesis Statistics` section. Public persisted-state
+  loading reads that block and treats older reports without it as unavailable.
+- Parsing is optional enrichment after successful Yosys execution. I/O or
+  format diagnostics remain queryable on the synthesis result but do not turn
+  a valid netlist build into a failure.
+
+## Milestones and acceptance
+
+1. Implement the typed model, parser, copy/free operations, deterministic cell
+   sorting, and realistic fixture tests for complete, partial, malformed,
+   empty, large, multi-module, and hierarchy-summary output.
+2. Attach parsed data and report metadata to `SolarSynthesisResult` only after
+   successful Yosys execution, while preserving the original public report.
+3. Persist and reload normalized data compatibly with old reports, and render
+   the requested terminal section without executing Yosys from `solar report`.
+4. Update public headers, CMake, README, command/API documentation, and
+   changelog; run focused tests, the full suite, and sanitizer verification.
+
+## Risks and limitations
+
+- Yosys `stat` is human-readable output rather than a stable interchange
+  schema. Unknown lines are intentionally ignored, but malformed values on
+  recognized lines are diagnosed.
+- Module count is inferred and cell totals depend on the most authoritative
+  section available. No FPGA-specific resource interpretation is attempted.
+
+## Completion evidence
+
+- The parser accepts both the traditional `Number of wires: 4` / `$add 1`
+  layout and the compact Yosys 0.66 `4 wires` / `1 $add` layout observed on
+  this machine. A real counter synthesis with Yosys 0.66 produced 1 inferred
+  module, 4 wires, 10 wire bits, 3 public wires, 6 public wire bits, 2 cells,
+  `$add=1`, and `$sdff=1`.
+- Yosys 0.66 omits some zero-valued categories from its compact text output.
+  Solar therefore reports memories, memory bits, and processes as
+  `not reported` rather than inventing zero values; this makes the real result
+  partial by design.
+- The original `synth/statistics.txt`, netlist, complete Yosys logs, producing
+  version, top, and normalized schema all remain available after publication.
+- The final GCC suite passed all 33 tests; the optional real cocotb integration
+  was the only explicit skip. Focused Clang and ASan/UBSan tests passed. LSan
+  could not initialize under the environment's ptrace restrictions and was
+  rerun with leak detection disabled rather than counted as passed.

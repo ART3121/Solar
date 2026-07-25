@@ -1,0 +1,22 @@
+=== left ===
+ Number of wires: 2
+ Number of wire bits: 3
+ Number of public wires: 1
+ Number of public wire bits: 1
+ Number of memories: 0
+ Number of memory bits: 0
+ Number of processes: 0
+ Number of cells: 1
+   $and 1
+
+=== right ===
+ Number of wires: 4
+ Number of wire bits: 8
+ Number of public wires: 2
+ Number of public wire bits: 4
+ Number of memories: 1
+ Number of memory bits: 16
+ Number of processes: 0
+ Number of cells: 2
+   $and 1
+   $or 1

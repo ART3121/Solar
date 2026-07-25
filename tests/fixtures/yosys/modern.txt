@@ -1,0 +1,15 @@
+6. Printing statistics.
+
+=== counter ===
+
+        +----------Local Count, excluding submodules.
+        |
+        4 wires
+       10 wire bits
+        3 public wires
+        6 public wire bits
+        3 ports
+        6 port bits
+        2 cells
+        1   $add
+        1   $sdff
