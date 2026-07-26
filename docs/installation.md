@@ -2,10 +2,10 @@
 
 ## Supported release platform
 
-The Solar 0.4.5 prebuilt release supports GNU/Linux x86_64 with glibc 2.35 or
+The Solar 0.4.6 prebuilt release supports GNU/Linux x86_64 with glibc 2.35 or
 newer. Ubuntu 22.04+, Debian 12+, current Fedora, and current Arch Linux are the
 release validation targets. ARM64, Alpine/musl, macOS, and Windows require a
-future port and do not receive a 0.4.5 binary.
+future port and do not receive a 0.4.6 binary.
 
 ## Recommended installation
 
@@ -26,11 +26,32 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Persist that line yourself in the startup file appropriate for your shell.
 
+## Shell completion
+
+Release and CMake installations include completion definitions for Bash, Zsh,
+and Fish. Static commands/options and dynamic tests, profiles, registered
+waveforms, and stored build IDs are completed without executing EDA tools.
+
+Bash and Fish normally discover files installed under their standard data
+directories. For a Zsh installation below `~/.local`, add the local completion
+directory before initializing completion:
+
+```zsh
+fpath=(~/.local/share/zsh/site-functions $fpath)
+autoload -Uz compinit
+compinit
+```
+
+Persist those lines yourself when desired. Solar deliberately does not modify
+`.bashrc`, `.zshrc`, Fish configuration, or framework-specific directories.
+System-prefix installations place `_solar` in the conventional Zsh site
+functions directory and normally require no extra `fpath` entry.
+
 ## Pin a version or prefix
 
 ```sh
-curl -fsSL https://github.com/ART3121/solar/releases/download/v0.4.5/install.sh \
-  | sh -s -- --version v0.4.5
+curl -fsSL https://github.com/ART3121/solar/releases/download/v0.4.6/install.sh \
+  | sh -s -- --version v0.4.6
 ```
 
 ```sh
@@ -55,7 +76,7 @@ When GitHub CLI is available, an immutable published release can also be
 verified with:
 
 ```sh
-gh release verify v0.4.5 --repo ART3121/solar
+gh release verify v0.4.6 --repo ART3121/solar
 ```
 
 ## External EDA tools

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(Solar VERSION 0.4.5 LANGUAGES C)
+project(Solar VERSION 0.4.6 LANGUAGES C)
 
 include(CTest)
 include(GNUInstallDirs)
@@ -114,6 +114,8 @@ add_library(solar_core STATIC
     src/core/discovery.c
     src/core/project.c
     src/core/progress.c
+    src/core/report_compare.c
+    src/core/report_history.c
     src/core/rtl.c
     src/core/build.c
     src/core/compiler.c
@@ -156,6 +158,7 @@ add_executable(solar
     src/cli/command_view.c
     src/cli/command_build.c
     src/cli/command_report.c
+    src/cli/command_completion.c
     src/cli/command_scan.c
     src/cli/progress.c
 )
@@ -209,6 +212,18 @@ install(
     DIRECTORY docs/
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
 )
+install(
+    FILES completions/bash/solar
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/bash-completion/completions
+)
+install(
+    FILES completions/zsh/_solar
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/zsh/site-functions
+)
+install(
+    FILES completions/fish/solar.fish
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/fish/vendor_completions.d
+)
 
 set(CPACK_GENERATOR "TGZ")
 set(CPACK_PACKAGE_NAME "solar")
@@ -226,6 +241,10 @@ set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 include(CPack)
 
 if(BUILD_TESTING)
+    find_program(SOLAR_TEST_BASH_EXECUTABLE bash)
+    find_program(SOLAR_TEST_ZSH_EXECUTABLE zsh)
+    find_program(SOLAR_TEST_FISH_EXECUTABLE fish)
+
     add_executable(test_result tests/test_result.c)
     target_link_libraries(test_result PRIVATE solar_core solar_warnings)
     add_test(NAME result COMMAND test_result)
@@ -312,6 +331,58 @@ if(BUILD_TESTING)
         SOLAR_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/yosys"
     )
     add_test(NAME synthesis_statistics COMMAND test_synthesis_statistics)
+
+    add_executable(test_report_history tests/test_report_history.c)
+    target_link_libraries(test_report_history PRIVATE solar_core solar_warnings)
+    add_test(
+        NAME report_history
+        COMMAND test_report_history $<TARGET_FILE:solar>
+    )
+
+    add_executable(test_completion tests/test_completion.c)
+    target_link_libraries(test_completion PRIVATE solar_core solar_warnings)
+    target_compile_definitions(test_completion PRIVATE
+        SOLAR_BASH_COMPLETION="${CMAKE_CURRENT_SOURCE_DIR}/completions/bash/solar"
+        SOLAR_ZSH_COMPLETION="${CMAKE_CURRENT_SOURCE_DIR}/completions/zsh/_solar"
+        SOLAR_FISH_COMPLETION="${CMAKE_CURRENT_SOURCE_DIR}/completions/fish/solar.fish"
+        SOLAR_TEST_BASH="$<IF:$<BOOL:${SOLAR_TEST_BASH_EXECUTABLE}>,${SOLAR_TEST_BASH_EXECUTABLE},>"
+        SOLAR_TEST_ZSH="$<IF:$<BOOL:${SOLAR_TEST_ZSH_EXECUTABLE}>,${SOLAR_TEST_ZSH_EXECUTABLE},>"
+    )
+    add_test(
+        NAME completion
+        COMMAND test_completion $<TARGET_FILE:solar>
+    )
+    add_test(
+        NAME installer
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_installer.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}/install.sh $<TARGET_FILE:solar>
+    )
+    if(SOLAR_TEST_BASH_EXECUTABLE)
+        add_test(
+            NAME completion_bash_syntax
+            COMMAND ${SOLAR_TEST_BASH_EXECUTABLE} -n
+                ${CMAKE_CURRENT_SOURCE_DIR}/completions/bash/solar
+        )
+    endif()
+    if(SOLAR_TEST_ZSH_EXECUTABLE)
+        add_test(
+            NAME completion_zsh_syntax
+            COMMAND ${SOLAR_TEST_ZSH_EXECUTABLE} -n
+                ${CMAKE_CURRENT_SOURCE_DIR}/completions/zsh/_solar
+        )
+    endif()
+    if(SOLAR_TEST_FISH_EXECUTABLE)
+        add_test(
+            NAME completion_fish_syntax
+            COMMAND ${SOLAR_TEST_FISH_EXECUTABLE} -n
+                ${CMAKE_CURRENT_SOURCE_DIR}/completions/fish/solar.fish
+        )
+    else()
+        add_test(NAME completion_fish_syntax COMMAND test_completion --skip-fish)
+        set_tests_properties(
+            completion_fish_syntax PROPERTIES SKIP_RETURN_CODE 77
+        )
+    endif()
 
     add_executable(test_verilator tests/test_verilator.c)
     target_link_libraries(test_verilator PRIVATE solar_core solar_warnings)

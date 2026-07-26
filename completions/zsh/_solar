@@ -1,0 +1,128 @@
+#compdef solar
+
+_solar_completion_static()
+{
+    compadd -- "$@"
+}
+
+_solar_completion_dynamic()
+{
+    local kind="$1"
+    local output
+    local -a candidates
+
+    output="$(command "$words[1]" __complete "$kind" 2>/dev/null)"
+    [[ -n "$output" ]] || return 0
+    candidates=("${(@f)output}")
+    compadd -- "${candidates[@]}"
+}
+
+_solar()
+{
+    local command_name="${words[2]-}"
+    local subcommand="${words[3]-}"
+    local previous=""
+
+    if (( CURRENT > 1 )); then
+        previous="${words[CURRENT - 1]}"
+    fi
+    if (( CURRENT == 2 )); then
+        _solar_completion_static \
+            init scan config check doctor clean build view report \
+            --help --version
+        return
+    fi
+
+    case "$previous" in
+        --template)
+            _solar_completion_static verilog sapho
+            return
+            ;;
+        --profile)
+            _solar_completion_dynamic profiles
+            return
+            ;;
+        --test)
+            _solar_completion_dynamic tests
+            return
+            ;;
+        --viewer)
+            _solar_completion_static gtkwave surfer
+            return
+            ;;
+        --waveform)
+            _solar_completion_dynamic waveforms
+            return
+            ;;
+        --against)
+            _solar_completion_dynamic build-ids
+            return
+            ;;
+        --name|--top|--limit)
+            return
+            ;;
+    esac
+
+    case "$command_name" in
+        init)
+            _solar_completion_static --template --help
+            ;;
+        scan|check)
+            _solar_completion_static --help
+            ;;
+        config)
+            if (( CURRENT == 3 )); then
+                _solar_completion_static set --help
+            elif [[ "$subcommand" == "set" ]]; then
+                _solar_completion_static --name --top --test
+            fi
+            ;;
+        doctor)
+            _solar_completion_static --all --help
+            ;;
+        clean)
+            _solar_completion_static --cache --all --help
+            ;;
+        build)
+            if (( CURRENT == 3 )); then
+                _solar_completion_static rtl sim synth full --help
+            elif [[ "$subcommand" == "sim" ]]; then
+                if [[ "$PREFIX" == -* ]]; then
+                    _solar_completion_static \
+                        --all --list --profile --dry-run --no-progress --verbose
+                else
+                    _solar_completion_dynamic tests
+                fi
+            elif [[ "$subcommand" == "full" ]]; then
+                _solar_completion_static \
+                    --profile --dry-run --no-progress --verbose
+            else
+                _solar_completion_static --profile --dry-run
+            fi
+            ;;
+        view)
+            if [[ "$PREFIX" == -* ]]; then
+                _solar_completion_static --viewer --waveform --help
+            else
+                _solar_completion_dynamic tests
+            fi
+            ;;
+        report)
+            if (( CURRENT == 3 )); then
+                _solar_completion_static show list compare --help
+            elif [[ "$subcommand" == "show" ]]; then
+                _solar_completion_dynamic build-ids
+            elif [[ "$subcommand" == "list" ]]; then
+                _solar_completion_static --limit
+            elif [[ "$subcommand" == "compare" ]]; then
+                if [[ "$PREFIX" == -* ]]; then
+                    _solar_completion_static --against --summary
+                else
+                    _solar_completion_dynamic build-ids
+                fi
+            fi
+            ;;
+    esac
+}
+
+_solar "$@"

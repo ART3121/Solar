@@ -1,7 +1,8 @@
 # Release process
 
-Solar releases are built from an existing protected semantic-version tag and
-published first as a draft.
+Solar releases are built from an existing protected semantic-version tag. The
+workflow publishes only after its clean build, tests, packaging, ABI ceiling,
+installer rollback, quick-start, and uninstall gates pass.
 
 ## Maintainer checklist
 
@@ -10,13 +11,13 @@ published first as a draft.
    installer.
 3. Run GCC, Clang, sanitizer, real available-tool, package, and installation
    matrices. Record skips separately from passes.
-4. Create and push an annotated tag such as `v0.4.5`.
-5. Let the release workflow rebuild from that tag and create a draft containing
+4. Create and push an annotated tag such as `v0.4.6`.
+5. Let the release workflow rebuild from that tag and publish a release containing
    `solar-linux-x86_64.tar.gz`, `install.sh`, and `SHA256SUMS`.
-6. Download the draft assets, verify checksums, install into a clean prefix,
+6. Download the published assets, verify checksums, install into a clean prefix,
    exercise the quick start, and uninstall.
-7. Review release notes and publish the immutable release. Never replace an
-   asset after publication; corrections receive a new patch version.
+7. Never replace an asset after publication; corrections receive a new patch
+   version.
 
 ## Remote repository settings
 

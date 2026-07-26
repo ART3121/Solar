@@ -1,6 +1,6 @@
 # Solar roadmap
 
-## Current v0.4.5 implementation
+## Current v0.4.6 implementation
 
 The current development tree contains:
 
@@ -14,10 +14,14 @@ The current development tree contains:
 - RTL-only validation/build support and optional VCD/FST publication after a
   successful simulation;
 - `build rtl`, `build sim`, `build synth`, and shared-context `build full`;
-- stage-based `build sim` progress with TTY redraw, linear CI output,
-  `--no-progress`, `--verbose`, heartbeat, and a measured stage summary;
+- stage-based `build sim` and full-build simulation progress with TTY redraw,
+  linear CI output, `--no-progress`, `--verbose`, heartbeat, and measured stages;
 - complete human-readable last-build reporting with host/tool snapshots and
   per-process monotonic wall timings;
+- Generic Synthesis Statistics, immutable report history, structured comparison
+  sidecars, and `report list`, `show`, and `compare` operations;
+- Bash, Zsh, and Fish completion for static CLI syntax and dynamic project/report
+  candidates;
 - isolated test artifacts and sequential failure summaries;
 - Compiler, Test, and Synthesis Services;
 - static YANC, Icarus, and Yosys adapters;
@@ -38,10 +42,9 @@ used a local header in a spaced include directory. Assembly uses validated
 `app_log.txt` instruction metadata plus staging-only compatibility files; its
 neutral PC map cannot correlate back to high-level source lines.
 
-The GCC, Clang 22.1.8, and ASan/UBSan acceptance matrices are green, with the
-real cocotb integration explicitly skipped because cocotb 2.x is absent. No
-release tag has been created; this is an implementation status, not a release
-announcement.
+The GCC, Clang, and ASan/UBSan acceptance matrices each register 38 tests and
+pass 37. Fish syntax is the sole explicit local skip because Fish is absent;
+real Icarus, Yosys, Verilator/cocotb, and YANC integrations pass.
 
 ## Version boundaries
 
@@ -56,7 +59,11 @@ Solar 0.4.5 adds explicit Surfer selection, transactional configuration edits,
 and public registered CMM/C++ Assembly. It keeps manifest format 2 and is
 documented in [Solar 0.4 to 0.4.5](migration-v0.4-to-v0.4.5.md).
 
-## Release follow-up for v0.4.5
+Solar 0.4.6 adds Generic Synthesis Statistics, immutable build-report history
+and comparison, general shell completion, and live progress during the
+simulation phase of `build full`. It keeps manifest format 2.
+
+## Release follow-up for v0.4.6
 
 Remaining release evidence is environment-specific:
 
@@ -64,19 +71,19 @@ Remaining release evidence is environment-specific:
   `ptrace`, or use an available equivalent such as Valgrind;
 - add an explicit supported-version policy if a future YANC release diverges
   from the validated v5.2 command/artifact contract;
-- execute the hosted CI and tag-gated draft-release workflow after pushing the
-  reviewed tree;
+- keep the hosted CI and tag-gated release workflow green for supported Linux
+  release environments;
 - enable GitHub Pages, Discussions, repository protection, and private
   vulnerability reporting through the explicit maintainer checklist.
 
 The opt-in real YANC matrix, native fake-tool tests, GCC/Clang Debug,
 ASan/UBSan, CMake installation, release packaging, checksum/rollback installer
 tests, ownership/path review, public manual, and community templates are
-complete in this tree. No tag or hosted release is implied by local evidence.
+complete in this tree.
 
-## Stable v0.4.5 acceptance
+## Stable v0.4.6 acceptance
 
-Before marking v0.4.5 stable:
+Before marking v0.4.6 stable:
 
 - format-1 and format-2 tests must pass;
 - named tests/profiles must work through real Icarus/Yosys flows;
@@ -97,6 +104,9 @@ Before marking v0.4.5 stable:
   per-process timing evidence without executing tools during `solar report`.
 - progress must remain monotonic, TTY-only for terminal control sequences, and
   responsive to `SIGINT` without inventing simulator-internal percentages.
+- report comparison must use persisted structured data, preserve legacy TXT
+  reports, distinguish missing values from zero, and execute no EDA backend.
+- `build full` must close its simulation progress display before synthesis.
 
 ## Later workflow capabilities
 

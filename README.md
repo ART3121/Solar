@@ -2,6 +2,13 @@
   <img src="docs/assets/solar-logo.svg" alt="Solar" width="620" />
 </p>
 
+<p align="center">
+  <img alt="C17" src="https://img.shields.io/badge/C-17-00599C?style=flat-square&amp;logo=c&amp;logoColor=white" />
+  <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=111111" />
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square" /></a>
+  <a href="https://github.com/ART3121/solar/releases/tag/v0.4.6"><img alt="Version: 0.4.6" src="https://img.shields.io/badge/version-0.4.6-EF6C00?style=flat-square" /></a>
+</p>
+
 # Solar
 
 Solar is a lightweight open hardware design platform and EDA workflow
@@ -15,7 +22,7 @@ future frontends.
 
 ## Status
 
-Solar 0.4.5 supports Linux x86_64 and project manifest format 2, with
+Solar 0.4.6 supports Linux x86_64 and project manifest format 2, with
 non-mutating compatibility for format 1.
 
 ```text
@@ -55,6 +62,12 @@ private YANC bundle, but never installs or changes system EDA packages. See the
 [installation manual](https://art3121.github.io/Site-Solar/docs/#install) for
 manual verification, dependencies, upgrades, and uninstall instructions.
 
+Solar installs command completion definitions for Bash, Zsh, and Fish. They
+complete the public command tree plus project tests, profiles, registered
+waveforms, and stored build IDs. A local-prefix Zsh installation may require
+adding `~/.local/share/zsh/site-functions` to `fpath`; Solar never edits shell
+startup files automatically.
+
 ## Runtime tools
 
 Install only the tools required by your flow:
@@ -83,6 +96,15 @@ solar build sim --list
 solar build sim
 solar build synth
 solar report
+solar report list
+solar report compare --summary
+```
+
+For example, after builds have been recorded, TAB completes the available
+baseline IDs:
+
+```sh
+solar report compare --against build-<TAB>
 ```
 
 `solar init` creates a synthesizable and simulatable Verilog project. Files
@@ -105,17 +127,28 @@ Executables, logs, scripts, and disposable work stay below `.solar/`. Solar
 records generated public files so `solar clean` never owns arbitrary user
 files.
 
+## Build reports
+
+Solar keeps the latest readable report and an immutable history below
+`.solar/reports/`. Reports include tool versions, host context, measured build
+times, generated artifacts and, after Yosys synthesis, Generic Synthesis
+Statistics such as wires, memories, processes and generic cell usage.
+
+```sh
+solar report                         # latest build
+solar report list                    # stored builds
+solar report show build-000041       # one stored report
+solar report compare --summary       # current versus previous
+solar report compare --against build-000041
+```
+
+Comparison reads persisted data and never reruns a simulator or Yosys. The
+original Yosys statistics remain in `synth/statistics.txt` or
+`hardware/statistics.txt`; generic cells are not FPGA utilization estimates.
+Simulation wall time describes execution on the host and remains distinct from
+the HDL time advanced inside a testbench.
+
 ## Documentation and manual
-## Generic Synthesis Statistics
-
-After a successful Yosys synthesis, Solar analyzes the dedicated `stat -top`
-artifact and stores a typed **Generic Synthesis Statistics** snapshot in the
-last-build report. `solar report` shows reported design totals and cell usage.
-Missing optional fields are shown as `not reported`, not zero. The original
-Yosys text remains available as `synth/statistics.txt` for Verilog projects or
-`hardware/statistics.txt` for SAPHO projects. These are generic Yosys cells and
-structures, not FPGA resource estimates or place-and-route data.
-
 
 - [Solar website](https://art3121.github.io/Site-Solar/)
 - [User manual](https://art3121.github.io/Site-Solar/docs/)
@@ -126,6 +159,7 @@ structures, not FPGA resource estimates or place-and-route data.
 - [Troubleshooting](https://art3121.github.io/Site-Solar/docs/#troubleshooting)
 - [Architecture](docs/architecture.md)
 - [Solar Core API](docs/api.md)
+- [Stored reports and comparison](docs/report-history.md)
 - [Testing and release evidence](docs/testing.md)
 
 The Solar website is the public entry point for documentation. Release

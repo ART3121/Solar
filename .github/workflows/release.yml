@@ -1,4 +1,4 @@
-name: Release draft
+name: Release
 
 "on":
   push:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and draft Linux x86_64 release
+    name: Build and publish Linux x86_64 release
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -28,11 +28,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          test "$RELEASE_TAG" = "v0.4.5"
-          grep -F 'project(Solar VERSION 0.4.5' CMakeLists.txt
-          grep -F '#define SOLAR_VERSION "0.4.5"' include/solar/solar.h
-          grep -F 'SOLAR_RELEASE_VERSION="0.4.5"' install.sh
-          grep -F '## [0.4.5]' CHANGELOG.md
+          test "$RELEASE_TAG" = "v0.4.6"
+          grep -F 'project(Solar VERSION 0.4.6' CMakeLists.txt
+          grep -F '#define SOLAR_VERSION "0.4.6"' include/solar/solar.h
+          grep -F 'SOLAR_RELEASE_VERSION="0.4.6"' install.sh
+          grep -F '## [0.4.6]' CHANGELOG.md
 
       - name: Install build and integration dependencies
         run: |
@@ -54,7 +54,7 @@ jobs:
         run: |
           cmake --build build-release --target package --parallel 2
           mkdir -p dist
-          cp build-release/solar-0.4.5-linux-x86_64.tar.gz \
+          cp build-release/solar-0.4.6-linux-x86_64.tar.gz \
             dist/solar-linux-x86_64.tar.gz
           cp install.sh dist/install.sh
           chmod 0755 dist/install.sh
@@ -88,16 +88,16 @@ jobs:
           SOLAR_INSTALL_BASE_URL: file://${{ github.workspace }}/dist
         run: |
           prefix="$RUNNER_TEMP/solar-install"
-          sh dist/install.sh --version v0.4.5 --prefix "$prefix"
+          sh dist/install.sh --version v0.4.6 --prefix "$prefix"
           "$prefix/bin/solar" --version
-          sh dist/install.sh --version v0.4.5 --prefix "$prefix"
+          sh dist/install.sh --version v0.4.6 --prefix "$prefix"
           bad_release="$RUNNER_TEMP/solar-bad-release"
           mkdir "$bad_release"
           cp dist/solar-linux-x86_64.tar.gz "$bad_release/"
           cp dist/SHA256SUMS "$bad_release/"
           printf 'corruption\n' >> "$bad_release/solar-linux-x86_64.tar.gz"
           if SOLAR_INSTALL_BASE_URL="file://$bad_release" \
-              sh dist/install.sh --version v0.4.5 --prefix "$prefix"; then
+              sh dist/install.sh --version v0.4.6 --prefix "$prefix"; then
             echo "corrupt release unexpectedly installed" >&2
             exit 1
           fi
@@ -112,7 +112,7 @@ jobs:
           sha256sum solar-linux-x86_64.tar.gz > SHA256SUMS
           cd "$GITHUB_WORKSPACE"
           if SOLAR_INSTALL_BASE_URL="file://$unsafe_release" \
-              sh dist/install.sh --version v0.4.5 --prefix "$prefix"; then
+              sh dist/install.sh --version v0.4.6 --prefix "$prefix"; then
             echo "unsafe release unexpectedly installed" >&2
             exit 1
           fi
@@ -129,7 +129,7 @@ jobs:
           test ! -e "$prefix/bin/solar"
           test -z "$(find "$prefix" -mindepth 1 -print -quit)"
 
-      - name: Create draft GitHub Release
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -140,6 +140,6 @@ jobs:
             dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --draft \
-            --title "Solar 0.4.5" \
-            --notes-file docs/release-notes-0.4.5.md
+            --latest \
+            --title "Solar 0.4.6" \
+            --notes-file docs/release-notes-0.4.6.md

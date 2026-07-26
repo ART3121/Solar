@@ -1659,3 +1659,215 @@ tentativa invalida altera `solar.toml`.
   was the only explicit skip. Focused Clang and ASan/UBSan tests passed. LSan
   could not initialize under the environment's ptrace restrictions and was
   rerun with leak detection disabled rather than counted as passed.
+
+# Stored Build Report Comparison
+
+## Current state
+
+- `solar report` reads the atomic human-readable `.solar/state/last-report.txt`.
+- Build contexts already retain monotonic nanosecond measurements for simulation
+  compilation, execution, source resolution, publication, and the enclosing
+  simulation step.
+- Successful Yosys synthesis already exposes typed Generic Synthesis Statistics
+  while preserving the original `statistics.txt` artifact.
+
+## Architecture and decisions
+
+- Add a Report History service in Solar Core. It owns build IDs, atomic history
+  publication, versioned sidecar parsing, context validation, baseline selection,
+  and overflow-safe comparisons.
+- Preserve `last-report.txt` as the compatibility source for plain
+  `solar report`; history records are additional immutable snapshots below
+  `.solar/reports/build-NNNNNN/`.
+- Persist durations as unsigned 64-bit nanoseconds. `simulation_total` is the
+  independently measured Solar `sim` step and is not a sum of overlapping
+  subtimers. HDL simulated duration remains absent until a backend supplies it.
+- Sidecar values use percent encoding so whitespace, equals signs, separators,
+  and control bytes cannot change the key/value grammar.
+- Automatic baseline selection is section-aware: a prior build may supply GSS,
+  simulation timings, or both. Explicit `--against` never falls back.
+
+## Milestones
+
+1. Define public history, timing, metadata, and comparison models.
+2. Persist successful and failed builds atomically with unique ordered IDs.
+3. Implement strict sidecar readers and backwards-compatible TXT-only records.
+4. Implement mathematical comparison and synthesis/simulation context checks.
+5. Add `report list`, `report show`, `report compare`, and compact output.
+6. Add unit/CLI regression coverage, documentation, full builds, sanitizers,
+   and local Release installation.
+
+## Risks
+
+- A failed sidecar write must not replace `latest` or corrupt an older record.
+- Missing data must remain distinct from a measured zero.
+- Multi-test builds aggregate wall-time metrics and identify the ordered test set;
+  comparisons are rejected when those sets differ.
+- Old directories containing only `report.txt` remain displayable but cannot be
+  reconstructed by parsing the human report.
+
+## Acceptance criteria
+
+- Plain `solar report` is byte-for-byte the existing last-report behavior.
+- Comparison commands never execute a backend or start a build.
+- GSS and simulation timings compare with correct zero, absence, overflow, and
+  percentage behavior.
+- Context differences block only the affected section or produce explicit
+  warnings as documented.
+- Every completed or failed build that reaches report publication receives an
+  immutable history record, and all focused/full tests pass without new warnings.
+
+## Completion evidence
+
+- The Core owns versioned GSS, timing, and metadata sidecars; mathematical
+  comparison and context validation are independent of CLI formatting.
+- Clean GCC and Clang Debug builds each passed all 34 tests, including the real
+  Icarus, Yosys, Verilator/cocotb, and bundled YANC CMM/C++/Assembly integration
+  flows available on this machine.
+- ASan/UBSan passed all 34 tests with `ASAN_OPTIONS=detect_leaks=0`.
+  LeakSanitizer itself is recorded as skipped because it cannot initialize
+  under the executor's `ptrace` policy; it is not counted as passed.
+- Focused `clang-tidy` checks report no finding in the new history, comparison,
+  CLI, and regression-test code. A repository-wide analyzer build still emits
+  findings in pre-existing Core/YANC code outside this feature; no new report
+  history module is named by those diagnostics.
+- Two real Yosys builds and two real Icarus simulations produced
+  `build-000001` through `build-000004`. `report list`, automatic timing
+  comparison, and explicit GSS comparison read those snapshots without running
+  a backend.
+- A clean Release build was installed under `~/.local`. The installed
+  `solar 0.4.5` binary successfully listed and compared the real temporary
+  project's stored reports.
+
+# General Shell Completion
+
+## Current state and decisions
+
+- Solar installs no shell-completion definitions today. Bash and Zsh are
+  available locally; Fish is not installed and must be reported as an explicit
+  verification skip rather than treated as tested.
+- Install conventional Bash, Zsh, and Fish definitions through CMake. Do not
+  modify shell startup files or expose completion plumbing in public help.
+- Add one hidden, read-only CLI protocol, `solar __complete <kind>`, with the
+  kinds `tests`, `profiles`, `build-ids`, and `waveforms`. It reuses the Project,
+  Artifact, and Report History services and prints one validated candidate per
+  line. Missing projects or state produce no candidates and no terminal noise.
+- Keep commands, subcommands, flags, templates, targets, and viewer names in the
+  completion definitions. User-defined project names, top names, and numeric
+  limits remain free-form.
+
+## Milestones and acceptance
+
+1. Implement the hidden candidate provider without executing EDA tools.
+2. Add Bash, Zsh, and Fish definitions covering the complete public CLI and
+   dynamic tests, profiles, build IDs, and registered waveforms.
+3. Install the definitions below the standard GNU data directories and document
+   the one-time Zsh `fpath` setup needed by a `~/.local` prefix.
+4. Test candidate discovery, prefixes, spaces, subdirectories, absent state,
+   shell syntax, and the absence of backend execution; then run the full build,
+   sanitizer, and local Release installation matrices.
+
+Completion succeeds when TAB offers context-valid candidates for every public
+command while ordinary CLI behavior and help remain unchanged.
+
+## Completion evidence
+
+- The hidden provider returns manifest-order tests/profiles, newest-first build
+  IDs, and registered waveform paths from a project subdirectory. With no
+  project it returns no output, and public help does not expose `__complete`.
+- Functional Bash and Zsh tests cover commands, build targets, templates,
+  tests, profiles, configuration test selection, viewers, paths containing
+  spaces, and every report build-ID position. Shell execution uses the same
+  Solar executable that the user invoked.
+- Clean GCC, Clang, and ASan/UBSan matrices each registered 38 tests and passed
+  37. `completion_fish_syntax` is the sole explicit skip because Fish is not
+  installed locally. Existing real EDA integrations passed in every matrix.
+- Focused `clang-tidy` analysis of the new CLI handler and completion regression
+  test is clean. A Release build completed without Solar compiler warnings.
+- The Release binary and all three completion definitions were installed below
+  `~/.local` and matched the verified build byte-for-byte. Installed Bash and
+  Zsh definitions completed four real stored build IDs after `--against`.
+
+# Full-build Simulation Progress
+
+## Decision and acceptance
+
+- `build full` currently leaves the progress observer disconnected, so its
+  simulation process is silent until completion. Reuse `SolarCliProgress` only
+  around the full pipeline's simulation sequence, resetting its clock when that
+  phase begins and closing the bar before synthesis starts.
+- Keep direct `build sim` behavior unchanged. Extend `--no-progress` and
+  `--verbose` to `build full` because that command now owns a visible simulation
+  phase; other non-simulation targets continue rejecting those flags.
+- In a TTY, activity callbacks keep the spinner and elapsed time moving while
+  the simulator runs. Redirected/CI output remains linear. Simulation failure
+  closes the progress display clearly and still prevents synthesis.
+
+Acceptance requires focused CLI/progress coverage, the complete GCC/Clang and
+sanitizer matrices, documentation/help/completion updates, and Release
+reinstallation without changing simulation, synthesis, or artifact semantics.
+
+## Completion evidence
+
+- `build full` connects the existing progress observer only for its simulation
+  sequence, emits a terminal completion event, then disconnects it before Yosys.
+  No simulation, synthesis, publication, or report semantics were duplicated.
+- CLI tests verify linear full-build activity and that `--no-progress` suppresses
+  every `[sim]` line. Bash/Zsh/Fish definitions and command help expose the two
+  progress controls for both `sim` and `full` targets.
+- A real two-test Verilog full build showed each Icarus/VVP stage in redirected
+  output, a 0-100% in-place TTY bar, both published VCDs, and successful Yosys
+  synthesis after the progress line closed.
+- GCC and Clang matrices registered 38 tests each: 37 passed and Fish syntax was
+  explicitly skipped because Fish is unavailable. ASan/UBSan covered the same
+  38 tests successfully with leak detection disabled because LeakSanitizer
+  cannot initialize under the executor's ptrace policy. Focused `clang-tidy`
+  analysis reported no findings.
+- The clean Release binary was installed to `~/.local/bin/solar`; its checksum
+  matches the verified build, and installed normal/no-progress full builds both
+  completed the real Icarus/VVP and Yosys flow.
+
+# Solar 0.4.6 Release
+
+## Scope and decisions
+
+- Release the already verified Generic Synthesis Statistics, stored report
+  comparison, general shell completion, and full-build simulation progress as
+  one compatible `0.4.6` update. Project manifest format remains 2.
+- Keep the `0.4.5` changelog and audit as historical records. Add a dedicated
+  `0.4.6` changelog section and release notes rather than retroactively assigning
+  post-release functionality to the previous version.
+- Reorganize the README report explanation around the user workflow, and place
+  C17, Linux, MIT, and 0.4.6 badges immediately below the logo.
+- Update the tag-gated workflow to publish the release only after its clean
+  build, tests, package, glibc ceiling, installer rollback, quick-start, and
+  uninstall checks pass.
+- Publish from `main`, keep `AGENTS.md` excluded, and remove obsolete remote
+  work branches after the release commit is safely reachable from `main`.
+
+## Acceptance
+
+- Every active version source agrees on 0.4.6, the release archive installs and
+  reports that version, and documentation distinguishes current references from
+  historical 0.4.5 evidence.
+- GCC, Clang, ASan/UBSan, package, installer, real available-tool, and installed
+  smoke tests pass; environmental skips remain explicit.
+- The release tag points at the reviewed `main` commit and the hosted release
+  exposes the archive, installer, and checksum assets.
+
+## Local completion evidence
+
+- Fresh GCC, Clang, and ASan/UBSan configurations each registered 39 tests:
+  38 passed and Fish syntax was the sole explicit environmental skip. All
+  available real EDA and bundled-YANC integrations passed.
+- The release installer initially rejected the newly packaged
+  `share/bash-completion/` directory. Its allowlist now names only the three
+  standard completion files and its shared syntax guard rejects absolute,
+  dotted, traversal, repeated-separator, and unexpected-character paths.
+- The installer regression passes in every compiler/sanitizer tree, proves
+  traversal rejection, and verifies complete removal of documentation asset and
+  completion directories. A complete CPack installation then ran the real
+  Verilog full flow, GSS/report history, and uninstalled to an empty prefix.
+- Focused `clang-tidy` is clean. The local Arch-built YANC binaries exceed the
+  release GLIBC ceiling, so only the Ubuntu 22.04 tag workflow output is eligible
+  for publication; that workflow enforces GLIBC 2.35 before creating a release.

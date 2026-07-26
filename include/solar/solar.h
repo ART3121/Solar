@@ -12,6 +12,7 @@
 #include "solar/filesystem.h"
 #include "solar/project.h"
 #include "solar/progress.h"
+#include "solar/report_history.h"
 #include "solar/result.h"
 #include "solar/runner.h"
 #include "solar/scan.h"
@@ -23,6 +24,6 @@
 #include "solar/yanc.h"
 #include "solar/waveform.h"
 
-#define SOLAR_VERSION "0.4.5"
+#define SOLAR_VERSION "0.4.6"
 
 #endif

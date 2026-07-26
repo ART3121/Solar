@@ -28,45 +28,21 @@ static int write_file(const char *path)
     return failed ? -1 : 0;
 }
 
-static char *read_file(const char *path)
+static bool read_expected_line(FILE *file, const char *expected)
 {
-    FILE *file = fopen(path, "r");
-    char *contents;
-    long length;
+    char *line = NULL;
+    size_t capacity = 0U;
+    ssize_t count = getline(&line, &capacity, file);
+    bool matches = false;
 
-    if (file == NULL || fseek(file, 0L, SEEK_END) != 0) {
-        if (file != NULL) (void)fclose(file);
-        return NULL;
+    if (count >= 0) {
+        while (count > 0 && (line[count - 1] == '\n' || line[count - 1] == '\r')) {
+            line[--count] = '\0';
+        }
+        matches = strcmp(line, expected) == 0;
     }
-    length = ftell(file);
-    if (length < 0L || fseek(file, 0L, SEEK_SET) != 0) {
-        (void)fclose(file);
-        return NULL;
-    }
-    contents = malloc((size_t)length + 1U);
-    if (contents == NULL) {
-        (void)fclose(file);
-        return NULL;
-    }
-    if (fread(contents, 1U, (size_t)length, file) != (size_t)length ||
-        fclose(file) != 0) {
-        free(contents);
-        return NULL;
-    }
-    contents[length] = '\0';
-    return contents;
-}
-
-static int wait_for_record(const char *path)
-{
-    int attempts;
-
-    for (attempts = 0; attempts < 100 && access(path, R_OK) != 0; attempts++) {
-        const struct timespec delay = {0, 10000000L};
-
-        (void)nanosleep(&delay, NULL);
-    }
-    return access(path, R_OK);
+    free(line);
+    return matches;
 }
 
 static int record_matches(
@@ -75,20 +51,31 @@ static int record_matches(
     const char *waveform
 )
 {
-    char *contents = read_file(record);
-    size_t expected_length = strlen(viewer) + strlen(waveform) + 3U;
-    char *expected = malloc(expected_length);
-    int matches = 0;
+    FILE *file = fopen(record, "r");
+    bool matches;
 
-    if (contents != NULL && expected != NULL) {
-        (void)snprintf(
-            expected, expected_length, "%s\n%s\n", viewer, waveform
-        );
-        matches = strcmp(contents, expected) == 0;
+    if (file == NULL) return 0;
+    matches = read_expected_line(file, viewer) &&
+        read_expected_line(file, waveform) && fgetc(file) == EOF;
+    (void)fclose(file);
+    return matches ? 1 : 0;
+}
+
+static int wait_for_record(
+    const char *path,
+    const char *viewer,
+    const char *waveform
+)
+{
+    int attempts;
+
+    for (attempts = 0; attempts < 100; attempts++) {
+        const struct timespec delay = {0, 10000000L};
+
+        if (record_matches(path, viewer, waveform)) return 0;
+        (void)nanosleep(&delay, NULL);
     }
-    free(expected);
-    free(contents);
-    return matches;
+    return record_matches(path, viewer, waveform) ? 0 : -1;
 }
 
 int main(int argc, char **argv)
@@ -121,16 +108,14 @@ int main(int argc, char **argv)
     }
     result = solar_waveform_open(waveform, true, &launched);
     if (result.status != SOLAR_STATUS_OK || !launched) goto cleanup;
-    if (wait_for_record(record) != 0 ||
-        !record_matches(record, "gtkwave", waveform)) goto cleanup;
+    if (wait_for_record(record, "gtkwave", waveform) != 0) goto cleanup;
     if (unlink(record) != 0) goto cleanup;
     launched = false;
     result = solar_waveform_open_with_viewer(
         waveform, SOLAR_WAVEFORM_VIEWER_SURFER, true, &launched
     );
     if (result.status != SOLAR_STATUS_OK || !launched ||
-        wait_for_record(record) != 0 ||
-        !record_matches(record, "surfer", waveform)) goto cleanup;
+        wait_for_record(record, "surfer", waveform) != 0) goto cleanup;
     launched = true;
     result = solar_waveform_open_with_viewer(
         waveform, (SolarWaveformViewer)99, true, &launched

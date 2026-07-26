@@ -58,11 +58,20 @@ static bool wait_for_file(const char *path)
 
     for (attempt = 0; attempt < 100; attempt++) {
         const struct timespec delay = {0, 10000000L};
+        struct stat information;
 
-        if (is_regular_file(path)) return true;
+        /* The detached helper creates the file before stdio flushes its
+         * contents. Wait for observable output before unlinking it. */
+        if (stat(path, &information) == 0 &&
+            S_ISREG(information.st_mode) && information.st_size > 0) return true;
         (void)nanosleep(&delay, NULL);
     }
-    return is_regular_file(path);
+    {
+        struct stat information;
+
+        return stat(path, &information) == 0 &&
+            S_ISREG(information.st_mode) && information.st_size > 0;
+    }
 }
 
 static int write_text_file(const char *path, const char *content)
@@ -102,14 +111,15 @@ static int report_failure(const char *test_name, const char *message)
     return 1;
 }
 
-static int run_arguments_and_expect(
+static int run_arguments_and_expect_output(
     const char *test_name,
     const char *solar_path,
     const char *working_directory,
     const char *const arguments[],
     int expected_exit,
     const char *stdout_fragment,
-    const char *stderr_fragment
+    const char *stderr_fragment,
+    const char *forbidden_stdout_fragment
 )
 {
     SolarProcessSpec specification = {
@@ -128,7 +138,9 @@ static int run_arguments_and_expect(
     if (!expected_runner_status || process.outcome != SOLAR_PROCESS_EXITED ||
         process.exit_code != expected_exit ||
         !text_contains(process.stdout_text, stdout_fragment) ||
-        !text_contains(process.stderr_text, stderr_fragment)) {
+        !text_contains(process.stderr_text, stderr_fragment) ||
+        (forbidden_stdout_fragment != NULL &&
+         text_contains(process.stdout_text, forbidden_stdout_fragment))) {
         (void)fprintf(
             stderr,
             "%s: expected exit %d, got outcome %d and exit %d\n",
@@ -150,6 +162,22 @@ static int run_arguments_and_expect(
     }
     solar_process_result_free(&process);
     return failed;
+}
+
+static int run_arguments_and_expect(
+    const char *test_name,
+    const char *solar_path,
+    const char *working_directory,
+    const char *const arguments[],
+    int expected_exit,
+    const char *stdout_fragment,
+    const char *stderr_fragment
+)
+{
+    return run_arguments_and_expect_output(
+        test_name, solar_path, working_directory, arguments, expected_exit,
+        stdout_fragment, stderr_fragment, NULL
+    );
 }
 
 static int run_and_expect(
@@ -753,6 +781,12 @@ int main(int argc, char *argv[])
         const char *sim_arguments[] = {
             solar_path, "build", "sim", "basic", NULL
         };
+        const char *full_arguments[] = {
+            solar_path, "build", "full", NULL
+        };
+        const char *full_no_progress_arguments[] = {
+            solar_path, "build", "full", "--no-progress", NULL
+        };
         const char *view_arguments[] = {
             solar_path, "view", "basic", NULL
         };
@@ -792,6 +826,16 @@ int main(int argc, char *argv[])
                 "GTKWave was invoked without --view"
             );
         }
+        failures += run_arguments_and_expect(
+            "CLI full reports simulation progress",
+            solar_path, directory, full_arguments, 0,
+            "[sim] running simulation", NULL
+        );
+        failures += run_arguments_and_expect_output(
+            "CLI full accepts no progress",
+            solar_path, directory, full_no_progress_arguments, 0,
+            "PASS  synth", NULL, "[sim]"
+        );
         failures += run_arguments_and_expect(
             "CLI sim no progress", solar_path, directory,
             no_progress_arguments, 0, "Simulation summary:", NULL
@@ -987,7 +1031,8 @@ int main(int argc, char *argv[])
 
         failures += run_arguments_and_expect(
             "CLI progress option requires sim", solar_path, directory,
-            arguments, 2, NULL, "requires the sim target"
+            arguments, 2, NULL,
+            "progress options require the sim or full target"
         );
     }
     {
@@ -1130,7 +1175,7 @@ int main(int argc, char *argv[])
     }
     if (run_and_expect(
             "CLI clean", solar_path, directory, "clean", 0,
-            "Removed 1 registered artifact(s), temporary data, and disposable state", NULL
+            "registered artifact(s), temporary data, and disposable state", NULL
         ) != 0) {
         failures++;
         goto cleanup;

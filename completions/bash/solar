@@ -1,0 +1,139 @@
+# Bash completion for Solar.
+
+_solar_completion_add_static()
+{
+    local prefix="$1"
+    local candidate
+
+    shift
+    for candidate in "$@"; do
+        if [[ "$candidate" == "$prefix"* ]]; then
+            COMPREPLY+=("$candidate")
+        fi
+    done
+}
+
+_solar_completion_add_dynamic()
+{
+    local kind="$1"
+    local prefix="$2"
+    local candidate
+
+    while IFS= read -r candidate; do
+        if [[ -n "$candidate" && "$candidate" == "$prefix"* ]]; then
+            COMPREPLY+=("$candidate")
+        fi
+    done < <(command "${COMP_WORDS[0]}" __complete "$kind" 2>/dev/null)
+}
+
+_solar_completion()
+{
+    local current="${COMP_WORDS[COMP_CWORD]}"
+    local previous=""
+    local command_name="${COMP_WORDS[1]-}"
+    local subcommand="${COMP_WORDS[2]-}"
+
+    COMPREPLY=()
+    if (( COMP_CWORD > 0 )); then
+        previous="${COMP_WORDS[COMP_CWORD - 1]}"
+    fi
+    if (( COMP_CWORD == 1 )); then
+        _solar_completion_add_static "$current" \
+            init scan config check doctor clean build view report \
+            --help --version
+        return
+    fi
+
+    case "$previous" in
+        --template)
+            _solar_completion_add_static "$current" verilog sapho
+            return
+            ;;
+        --profile)
+            _solar_completion_add_dynamic profiles "$current"
+            return
+            ;;
+        --test)
+            _solar_completion_add_dynamic tests "$current"
+            return
+            ;;
+        --viewer)
+            _solar_completion_add_static "$current" gtkwave surfer
+            return
+            ;;
+        --waveform)
+            _solar_completion_add_dynamic waveforms "$current"
+            return
+            ;;
+        --against)
+            _solar_completion_add_dynamic build-ids "$current"
+            return
+            ;;
+        --name|--top|--limit)
+            return
+            ;;
+    esac
+
+    case "$command_name" in
+        init)
+            _solar_completion_add_static "$current" --template --help
+            ;;
+        scan|check)
+            _solar_completion_add_static "$current" --help
+            ;;
+        config)
+            if (( COMP_CWORD == 2 )); then
+                _solar_completion_add_static "$current" set --help
+            elif [[ "$subcommand" == "set" ]]; then
+                _solar_completion_add_static "$current" --name --top --test
+            fi
+            ;;
+        doctor)
+            _solar_completion_add_static "$current" --all --help
+            ;;
+        clean)
+            _solar_completion_add_static "$current" --cache --all --help
+            ;;
+        build)
+            if (( COMP_CWORD == 2 )); then
+                _solar_completion_add_static "$current" rtl sim synth full --help
+            elif [[ "$subcommand" == "sim" ]]; then
+                if [[ "$current" == -* ]]; then
+                    _solar_completion_add_static "$current" \
+                        --all --list --profile --dry-run --no-progress --verbose
+                else
+                    _solar_completion_add_dynamic tests "$current"
+                fi
+            elif [[ "$subcommand" == "full" ]]; then
+                _solar_completion_add_static "$current" \
+                    --profile --dry-run --no-progress --verbose
+            else
+                _solar_completion_add_static "$current" --profile --dry-run
+            fi
+            ;;
+        view)
+            if [[ "$current" == -* ]]; then
+                _solar_completion_add_static "$current" --viewer --waveform --help
+            else
+                _solar_completion_add_dynamic tests "$current"
+            fi
+            ;;
+        report)
+            if (( COMP_CWORD == 2 )); then
+                _solar_completion_add_static "$current" show list compare --help
+            elif [[ "$subcommand" == "show" ]]; then
+                _solar_completion_add_dynamic build-ids "$current"
+            elif [[ "$subcommand" == "list" ]]; then
+                _solar_completion_add_static "$current" --limit
+            elif [[ "$subcommand" == "compare" ]]; then
+                if [[ "$current" == -* ]]; then
+                    _solar_completion_add_static "$current" --against --summary
+                else
+                    _solar_completion_add_dynamic build-ids "$current"
+                fi
+            fi
+            ;;
+    esac
+}
+
+complete -F _solar_completion solar
