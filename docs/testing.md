@@ -39,6 +39,8 @@ The registered suite covers:
 - progress percentage schedules for Verilog/SAPHO, time formatting, TTY redraw,
   linear redirected output, `--no-progress`, `--verbose`, every failing stage,
   and long-running spinner activity;
+- full-build simulation progress, including linear non-TTY activity, TTY redraw,
+  suppression through `build full --no-progress`, and clean handoff to synthesis;
 - Linux host snapshot collection for OS/kernel/architecture, CPU, memory, and
   page-size report fields;
 - Icarus/Yosys argument construction and testbench exclusion from synthesis;
@@ -337,3 +339,80 @@ from the pinned upstream commit
 support Ubuntu 24.04's packaged Verilator 5.020. The Ubuntu 22.04 release job
 intentionally treats Verilator and cocotb as optional skips; it validates the
 release archive against Icarus, Yosys, and the bundled YANC toolchain.
+
+## Stored report comparison evidence
+
+The report-history test exercises unsigned comparison at zero and near
+`UINT64_MAX`, missing values, added and removed Yosys cells, deterministic
+cell ordering, normalized and incompatible HDL-duration units, failed and
+partial simulation timings, context incompatibilities/warnings, escaped
+versioned sidecar round trips, unique IDs, atomic `latest`, TXT-only legacy
+records, corrupt metadata, and the `list`, `show`, `compare`, `--against`, and
+`--summary` CLI forms including invalid arguments. These tests use no EDA
+executable.
+
+On 2026-07-25, a clean GCC Debug build registered and passed all 34 tests.
+That run also exercised the installed real Icarus/VVP, Yosys,
+Verilator/cocotb, and bundled YANC CMM/C++/Assembly integration flows. A clean
+Clang build passed the same 34 tests. ASan/UBSan also passed all 34 tests with
+`ASAN_OPTIONS=detect_leaks=0`; LeakSanitizer is explicitly skipped because it
+cannot initialize under the executor's `ptrace` policy.
+
+Focused `clang-tidy` analysis of the history, comparison, report CLI, and
+related regression tests produced no diagnostics. A broader analyzer build
+still reports existing findings in unrelated Core and bundled YANC sources;
+those are not presented as a clean repository-wide static-analysis result.
+
+Two real Yosys synthesis builds and two real Icarus simulations created four
+ordered snapshots. The installed Release binary (`solar 0.4.5`) successfully
+listed them, selected the prior compatible simulation baseline, and compared
+two explicit synthesis builds. These report operations only read persisted
+files and did not invoke an EDA backend.
+
+## Shell completion evidence
+
+The completion regression creates a format-2 project in a path containing
+spaces with two tests, two profiles, two stored builds, and a registered
+waveform whose filename contains a space. It checks candidate discovery from a
+child directory, empty output outside a project, hidden protocol isolation,
+and functional Bash/Zsh completion for the full public CLI contexts. Its child
+environment has no EDA executable on `PATH`, proving candidate lookup does not
+start a backend.
+
+On 2026-07-25, clean GCC, Clang, and ASan/UBSan builds each registered 38 tests
+and passed 37, including all real integrations. Fish syntax was the only
+explicit skip because Fish is not installed on this machine. Bash and Zsh
+syntax and functional checks passed, and focused `clang-tidy` analysis of the
+new C code produced no findings.
+
+The Release installation placed the definitions in the standard Bash, Zsh,
+and Fish data directories below `~/.local`; each installed file matched its
+verified source. Bash and Zsh smoke tests loaded those installed definitions
+and completed the four build IDs from a real report history.
+
+## v0.4.6 release evidence
+
+Fresh GCC, Clang 22.1.8, and ASan/UBSan builds of the compiled `0.4.6` identity
+each registered 39 tests. In each matrix, 38 passed and only Fish syntax was
+explicitly skipped because Fish is unavailable locally. The passing set
+includes real Icarus/VVP, Yosys, native Verilator, Verilator/cocotb, and bundled
+YANC CMM/C++/Assembly integrations. ASan/UBSan used
+`ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer cannot initialize under the
+executor's `ptrace` policy.
+
+The new installer regression builds a checksummed archive around the tested
+Solar binary, installs Bash/Zsh/Fish completion paths, uninstalls to an empty
+prefix, and confirms that an archive member containing
+`include/solar/../../evil` is rejected. Focused `clang-tidy` checks on report
+history, comparison, completion, progress, and their tests produced no finding.
+
+A complete CPack archive installed as Solar 0.4.6 into a temporary prefix. The
+installed binary ran `init`, `scan`, `check`, a real Icarus/Yosys `build full`,
+GSS reporting, and report-history listing before uninstalling to an empty
+prefix. `AGENTS.md`, local build trees, and workspace artifacts are absent from
+the package.
+
+The local Arch Linux package is functional evidence, not the portable release
+asset: its locally built bundled YANC binaries require GLIBC 2.38. The hosted
+tag workflow rebuilds on Ubuntu 22.04 and refuses publication unless Solar and
+every bundled YANC executable stay at or below the declared GLIBC 2.35 ceiling.

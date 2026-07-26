@@ -121,11 +121,18 @@ static SolarResult parse_options(
         }
     }
     if (options->target != BUILD_TARGET_SIM &&
-        (options->simulation_name != NULL || options->all || options->list ||
-         options->no_progress || options->verbose)) {
+        (options->simulation_name != NULL || options->all || options->list)) {
         return argument_error(
             "simulation selection requires the sim target",
             "use solar build sim [<name>|--all|--list]"
+        );
+    }
+    if (options->target != BUILD_TARGET_SIM &&
+        options->target != BUILD_TARGET_FULL &&
+        (options->no_progress || options->verbose)) {
+        return argument_error(
+            "progress options require the sim or full target",
+            "use --no-progress or --verbose with solar build sim/full"
         );
     }
     if ((options->all && options->list) ||
@@ -373,7 +380,8 @@ static void print_context(
 
 static SolarResult execute_target(
     SolarBuildContext *context,
-    const BuildOptions *options
+    const BuildOptions *options,
+    SolarCliProgress *progress
 )
 {
     SolarResult result = solar_build_context_check(context);
@@ -394,7 +402,34 @@ static SolarResult execute_target(
     if (options->target == BUILD_TARGET_SYNTH) {
         return solar_build_context_synthesize(context);
     }
+    if (!context->dry_run) {
+        solar_cli_progress_init(
+            progress, stdout, stderr, !options->no_progress, options->verbose,
+            false, -1
+        );
+        solar_build_context_set_progress(
+            context, solar_cli_progress_observer(progress)
+        );
+    }
     result = solar_build_context_test_sequence(context, true);
+    if (!context->dry_run) {
+        if (result.status == SOLAR_STATUS_OK) {
+            solar_progress_stage(
+                context->progress_observer, SOLAR_PROGRESS_FINALIZE,
+                "Finalizing simulation",
+                context->project.config.simulation.backend
+            );
+        }
+        solar_progress_stage(
+            context->progress_observer,
+            result.status == SOLAR_STATUS_OK
+                ? SOLAR_PROGRESS_COMPLETE : SOLAR_PROGRESS_FAILED,
+            result.status == SOLAR_STATUS_OK
+                ? "Simulation completed" : "Simulation failed",
+            context->project.config.simulation.backend
+        );
+        solar_build_context_set_progress(context, NULL);
+    }
     if (result.status == SOLAR_STATUS_OK) {
         result = solar_build_context_synthesize(context);
     }
@@ -436,7 +471,7 @@ SolarResult solar_cli_command_build(
         progress.yanc_project =
             context.project.config.compiler.backend != NULL;
         solar_cli_print_legacy_warning(&context.project);
-        result = execute_target(&context, &options);
+        result = execute_target(&context, &options, &progress);
     }
     if (result.status == SOLAR_STATUS_OK &&
         options.target == BUILD_TARGET_SIM) {

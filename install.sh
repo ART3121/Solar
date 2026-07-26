@@ -2,7 +2,7 @@
 
 set -eu
 
-SOLAR_RELEASE_VERSION="0.4.5"
+SOLAR_RELEASE_VERSION="0.4.6"
 SOLAR_REPOSITORY="ART3121/solar"
 SOLAR_ARCHIVE="solar-linux-x86_64.tar.gz"
 SOLAR_MANIFEST_RELATIVE="share/solar/install-manifest.txt"
@@ -18,7 +18,7 @@ backup_list=""
 usage()
 {
     cat <<'EOF'
-Usage: install.sh [--version v0.4.5] [--prefix PATH] [--uninstall]
+Usage: install.sh [--version v0.4.6] [--prefix PATH] [--uninstall]
 
 Install the Solar Linux x86_64 release below ~/.local by default.
 The installer does not use sudo, install EDA tools, or edit shell files.
@@ -38,8 +38,12 @@ require_command()
 
 safe_relative_path()
 {
+    safe_path_syntax "$1" || return 1
     case "$1" in
-        bin/solar|include/solar/*|lib/libsolar_core.a|libexec/solar/*|share/doc/Solar/*)
+        bin/solar|include/solar/*|lib/libsolar_core.a|libexec/solar/*|\
+        share/doc/Solar/*|share/bash-completion/completions/solar|\
+        share/zsh/site-functions/_solar|\
+        share/fish/vendor_completions.d/solar.fish)
             return 0
             ;;
         *)
@@ -48,12 +52,27 @@ safe_relative_path()
     esac
 }
 
+safe_path_syntax()
+{
+    case "$1" in
+        ""|/*|.|..|./*|../*|*/.|*/..|*/./*|*/../*|*//*|\
+        *[!A-Za-z0-9._/+-]*)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 safe_archive_path()
 {
     member_path=${1%/}
+    safe_path_syntax "$member_path" || return 1
     case "$member_path" in
         bin|include|include/solar|lib|libexec|libexec/solar|libexec/solar/*|\
-        share|share/doc|share/doc/Solar|share/doc/Solar/*)
+        share|share/doc|share/doc/Solar|share/doc/Solar/*|\
+        share/bash-completion|share/bash-completion/completions|\
+        share/zsh|share/zsh/site-functions|share/fish|\
+        share/fish/vendor_completions.d)
             return 0
             ;;
     esac
@@ -73,8 +92,15 @@ remove_empty_directories()
     rmdir "$prefix/libexec" 2>/dev/null || true
     rmdir "$prefix/share/doc/Solar/licenses" 2>/dev/null || true
     rmdir "$prefix/share/doc/Solar/pt-BR" 2>/dev/null || true
+    rmdir "$prefix/share/doc/Solar/assets" 2>/dev/null || true
     rmdir "$prefix/share/doc/Solar" 2>/dev/null || true
     rmdir "$prefix/share/doc" 2>/dev/null || true
+    rmdir "$prefix/share/bash-completion/completions" 2>/dev/null || true
+    rmdir "$prefix/share/bash-completion" 2>/dev/null || true
+    rmdir "$prefix/share/zsh/site-functions" 2>/dev/null || true
+    rmdir "$prefix/share/zsh" 2>/dev/null || true
+    rmdir "$prefix/share/fish/vendor_completions.d" 2>/dev/null || true
+    rmdir "$prefix/share/fish" 2>/dev/null || true
     rmdir "$prefix/share/solar" 2>/dev/null || true
     rmdir "$prefix/bin" 2>/dev/null || true
     rmdir "$prefix/lib" 2>/dev/null || true
@@ -191,7 +217,7 @@ case "$requested_version" in
         release_base="https://github.com/$SOLAR_REPOSITORY/releases/download/$requested_version"
         ;;
     *)
-        fail "version must be latest or a tag such as v0.4.5"
+        fail "version must be latest or a tag such as v0.4.6"
         ;;
 esac
 

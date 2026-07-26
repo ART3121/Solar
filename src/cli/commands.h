@@ -38,7 +38,16 @@ SolarResult solar_cli_command_build(
     int argument_count,
     char *const arguments[]
 );
-SolarResult solar_cli_command_report(const char *start_path);
+SolarResult solar_cli_command_report(
+    const char *start_path,
+    int argument_count,
+    char *const arguments[]
+);
+SolarResult solar_cli_command_complete(
+    const char *start_path,
+    int argument_count,
+    char *const arguments[]
+);
 SolarResult solar_cli_command_scan(const char *start_path);
 
 SolarResult solar_cli_open_waveform_path(

@@ -230,6 +230,14 @@ collected while writing and are excluded from the operation duration.
 Host data is deliberately limited to hostname, OS/kernel/architecture, CPU
 model/count, memory, page size, and the compiler/build type used for Solar.
 
+The Report History service snapshots that human report into an immutable
+`.solar/reports/build-NNNNNN/` record. Structured GSS, nanosecond simulation
+timings, and escaped technical metadata live in separate versioned sidecars;
+comparison never parses the formatted report. Publication stages the complete
+record, renames it into place, and only then atomically updates the textual
+`latest` marker. Failed builds retain any partial timings that reached the
+BuildContext.
+
 The synthesis-statistics parser is a separate Core module. It prefers the
 Yosys `design hierarchy` summary when present, otherwise accumulates module
 sections once, and records a presence bit for each numeric field. The

@@ -3,13 +3,56 @@
 All notable changes to Solar are recorded here. No tag or release is implied by
 this development changelog.
 
+## [0.4.6]
+
+### Added
+
+- Generic Synthesis Statistics collected from the dedicated Yosys `stat -top`
+  artifact, with typed Core access, per-field availability, generic cell usage,
+  persistent sidecars, and preservation of the original text report.
+- Immutable build-report history with ordered IDs, atomic `latest`, TXT reports,
+  versioned GSS/timing/metadata sidecars, and records for failed builds.
+- `solar report list`, `solar report show`, and overflow-safe
+  `solar report compare`, including explicit baselines, compact summaries, cell
+  additions/removals, simulation timings, and technical-context warnings.
+- Bash, Zsh, and Fish completion for the complete public CLI and dynamic project
+  tests, profiles, registered waveforms, and stored report IDs.
+
+### Changed
+
+- `solar build full` now shows the same live simulation progress used by
+  `solar build sim`, including TTY redraw, linear redirected output,
+  `--no-progress`, and `--verbose`, and closes it before synthesis begins.
+- Simulation compilation, execution, and enclosing-step wall times are persisted
+  as integer nanoseconds for report comparison. Simulated HDL duration remains
+  a separate optional metric.
+- `solar report` presents Generic Synthesis Statistics with aligned metadata,
+  compact narrow-terminal wrapping, and explicit metric/value and cell/count
+  tables.
+- The product version is `0.4.6`; project manifest format remains `2` and no
+  manifest migration is required from Solar 0.4.5.
+
+### Fixed
+
+- The checksum-validating release installer accepts the standard Bash, Zsh, and
+  Fish completion directories while retaining strict traversal, special-file,
+  and path-character validation.
+- Uninstall removes empty release documentation asset and shell-completion
+  directories while preserving unrelated files and non-empty directories.
+
+### Compatibility
+
+- Existing format-1 and format-2 projects continue to load without rewrites.
+- Existing latest-build TXT reports remain readable. Older reports without
+  structured sidecars are listed as unavailable for comparison rather than
+  being reconstructed from formatted text.
+- Simulation, synthesis, SAPHO generation, public artifact paths, and external
+  viewer behavior are unchanged.
+
 ## [0.4.5]
 
 ### Added
 
-- Generic Synthesis Statistics collected from Yosys `stat -top`, including a
-  typed Solar Core API, per-field availability, generic cell usage, persistent
-  report round-tripping, and preservation of the original text artifact.
 - Linux x86_64 CPack release archives, a checksum-validating `~/.local`
   installer with safe upgrade/uninstall behavior, and tag-gated draft release
   automation for `ART3121/solar`.
@@ -26,9 +69,6 @@ this development changelog.
 
 ### Changed
 
-- `solar report` now presents Generic Synthesis Statistics with aligned
-  metadata, compact narrow-terminal wrapping, explicit metric/value and
-  cell/count tables, and cleaner continuation lines.
 - The product version is `0.4.5`; project manifest format remains `2` and no
   manifest migration is required from Solar 0.4.0.
 - The public SAPHO initializer is now `solar init --template sapho`; the old

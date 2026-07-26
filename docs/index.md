@@ -1,7 +1,7 @@
 # Solar user manual
 
 Solar is a lightweight open hardware design platform and EDA workflow
-orchestrator for Linux. This manual describes the stable 0.4.5 command surface
+orchestrator for Linux. This manual describes the stable 0.4.6 command surface
 and project manifest format 2.
 
 ## Start here
@@ -32,7 +32,8 @@ Brazilian Portuguese readers can begin with
 - [Testing](testing.md)
 - [Roadmap](roadmap.md)
 - [Release process](release-process.md)
-- [Solar 0.4.5 release audit](release-audit-0.4.5.md)
+- [Solar 0.4.5 public release audit](release-audit-0.4.5.md)
+- [Solar 0.4.6 release notes](release-notes-0.4.6.md)
 
 The Pages site follows the latest stable branch. Every release archive contains
 the documentation that matches its binary.

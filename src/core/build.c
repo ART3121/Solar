@@ -6,6 +6,8 @@
 #include "solar/solar.h"
 #include "solar/system.h"
 
+#include "report_history_internal.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -1474,7 +1476,7 @@ SolarResult solar_build_report_write(const SolarBuildContext *context)
         );
         goto cleanup;
     }
-    result = solar_result_ok();
+    result = solar_report_history_store(context, path);
 
 cleanup:
     if (file != NULL) (void)fclose(file);

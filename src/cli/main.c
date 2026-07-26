@@ -69,7 +69,8 @@ static bool print_command_help(const char *command, FILE *stream)
             "  solar build sim [<name>|--all|--list] [--profile <profile>] [--dry-run]\n"
             "                  [--no-progress] [--verbose]\n"
             "  solar build synth [--profile <profile>] [--dry-run]\n"
-            "  solar build full [--profile <profile>] [--dry-run]\n");
+            "  solar build full [--profile <profile>] [--dry-run]\n"
+            "                   [--no-progress] [--verbose]\n");
     } else if (strcmp(command, "view") == 0) {
         (void)fprintf(stream,
             "Usage:\n"
@@ -78,7 +79,20 @@ static bool print_command_help(const char *command, FILE *stream)
             "Open a registered waveform without building. GTKWave is the default.\n");
     } else if (strcmp(command, "report") == 0) {
         (void)fprintf(stream,
-            "Usage: solar report\nShow the complete report for the last build.\n");
+            "Usage:\n"
+            "  solar report\n"
+            "  solar report show <build-id>\n"
+            "  solar report list [--limit <count>]\n"
+            "  solar report compare [<build-id>] [--against <build-id>] [--summary]\n"
+            "\nCommands:\n"
+            "  show       Display a stored build report.\n"
+            "  list       List stored build reports.\n"
+            "  compare    Compare synthesis statistics and simulation timings.\n"
+            "\nCompare options:\n"
+            "  --against <build-id>    Select the baseline build.\n"
+            "  --summary               Display a compact comparison.\n"
+            "\nList options:\n"
+            "  --limit <count>         Limit the number of displayed builds.\n");
     } else {
         return false;
     }
@@ -178,9 +192,10 @@ static SolarResult dispatch_command(
         return solar_cli_command_view(".", argument_count, arguments);
     }
     if (strcmp(command, "report") == 0) {
-        result = no_arguments("use solar report", argument_count);
-        return result.status == SOLAR_STATUS_OK
-            ? solar_cli_command_report(".") : result;
+        return solar_cli_command_report(".", argument_count, arguments);
+    }
+    if (strcmp(command, "__complete") == 0) {
+        return solar_cli_command_complete(".", argument_count, arguments);
     }
     return solar_result_error(
         SOLAR_STATUS_INVALID_ARGUMENT,

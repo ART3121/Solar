@@ -52,3 +52,40 @@ records, or values returned by accessor functions.
 This API represents **Generic Synthesis Statistics** only. It does not map
 generic cells to any FPGA device resources and does not expose placement,
 routing, utilization percentage, or bitstream information.
+
+## Stored build reports
+
+`solar/report_history.h` exposes the persisted report model independently of
+the CLI. Initialize and free every owned output with its matching function:
+
+```c
+SolarProject project;
+SolarStoredBuildReport current;
+SolarStoredBuildReport baseline;
+SolarBuildReportComparison comparison;
+
+solar_project_init(&project);
+solar_stored_build_report_init(&current);
+solar_stored_build_report_init(&baseline);
+solar_build_report_comparison_init(&comparison);
+
+/* Load the project first, then: */
+solar_report_history_load_latest(&project, &current);
+solar_report_history_find_previous_comparable(&project, &current, &baseline);
+solar_build_reports_compare(&baseline, &current, &comparison);
+
+solar_build_report_comparison_free(&comparison);
+solar_stored_build_report_free(&baseline);
+solar_stored_build_report_free(&current);
+solar_project_free(&project);
+```
+
+`SolarStoredMetric.present` distinguishes an unavailable metric from a real
+zero. `solar_metric_compare()` computes unsigned magnitudes without converting
+near-`UINT64_MAX` values to a signed difference. GSS, timing, and aggregate
+comparison functions allocate owned cell tables, metadata, units, and warning
+strings in their output structures.
+
+History discovery, sidecar parsing, context validation, mathematical
+comparison, and terminal formatting are separate layers. None of the public
+history read/compare functions executes an external process.

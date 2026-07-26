@@ -31,7 +31,8 @@ editing.
 | `solar build full` | Check, RTL, simulations in manifest order, then synthesis. |
 
 Executable build targets accept `--profile NAME` and `--dry-run`. Simulation
-also accepts `--no-progress` and `--verbose`. Dry-run validates and reports
+and full builds also accept `--no-progress` and `--verbose`; for a full build,
+these options control its simulation phase. Dry-run validates and reports
 planned stages without starting external tools.
 
 ## Artifact commands
@@ -41,8 +42,26 @@ planned stages without starting external tools.
 | `solar view [test] [--viewer gtkwave\|surfer]` | Open the registered waveform for a test. |
 | `solar view --waveform FILE [--viewer ...]` | Open a registered project waveform explicitly. |
 | `solar report` | Display `.solar/state/last-report.txt` without building. |
+| `solar report list [--limit N]` | List immutable stored build reports and their available sidecars. |
+| `solar report show BUILD-ID` | Display the selected stored `report.txt` unchanged. |
+| `solar report compare [BUILD-ID] [--against BUILD-ID] [--summary]` | Compare stored GSS and simulation timings without running tools. |
 
 Automatic GUI launch is never part of a build command.
+
+## Shell completion
+
+Installed Bash, Zsh, and Fish definitions complete the entire public command
+tree. Project-aware candidates include:
+
+- test names for `build sim`, `config set --test`, and `view`;
+- profile names after `build ... --profile`;
+- registered waveforms after `view --waveform`;
+- stored IDs for `report show`, the current side of `report compare`, and
+  `report compare --against`.
+
+Completion reads project state only. It never builds, opens a viewer, or starts
+YANC, Yosys, Icarus, Verilator, or cocotb. Free-form names, top modules, and
+numeric limits remain user input rather than guessed values.
 
 ### Generic Synthesis Statistics
 
@@ -59,6 +78,36 @@ stdout/stderr remain below `.solar/logs/`.
 
 The data does not estimate FPGA LUTs, ALMs, DSPs, utilization percentages,
 timing closure, placement, routing, or bitstreams.
+
+### Stored report comparison
+
+Every report-producing build reserves a monotonically increasing ID such as
+`build-000041` and atomically publishes `report.txt`, `metadata.dat`, and any
+available `synthesis-stats.dat` or `timings.dat` below `.solar/reports/`.
+
+```sh
+solar report list
+solar report list --limit 5
+solar report show build-000041
+solar report compare
+solar report compare --against build-000041
+solar report compare build-000052 --against build-000041 --summary
+```
+
+All build-ID positions support TAB completion when a shell definition is
+active.
+
+With no IDs, `compare` uses `latest` as current and searches older records for
+the first build with at least one context-compatible section. `--against`
+selects exactly the named baseline and never falls back. A positional build ID
+selects the current side. Plain `solar report` retains its original behavior
+and only prints `.solar/state/last-report.txt`.
+
+Simulation compilation, execution, and total values are monotonic host wall
+times persisted as integer nanoseconds. The total is measured independently
+around the Solar simulation service, not calculated by adding overlapping
+subtimers. Simulated HDL duration is a different quantity and remains
+`not reported` unless a backend supplies a value and unit.
 
 ## Exit status classes
 
