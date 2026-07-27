@@ -2,10 +2,10 @@
 
 ## Supported release platform
 
-The Solar 0.4.6 prebuilt release supports GNU/Linux x86_64 with glibc 2.35 or
+The Solar 0.5.0 prebuilt release supports GNU/Linux x86_64 with glibc 2.35 or
 newer. Ubuntu 22.04+, Debian 12+, current Fedora, and current Arch Linux are the
 release validation targets. ARM64, Alpine/musl, macOS, and Windows require a
-future port and do not receive a 0.4.6 binary.
+future port and do not receive a 0.5.0 binary.
 
 ## Recommended installation
 
@@ -50,8 +50,8 @@ functions directory and normally require no extra `fpath` entry.
 ## Pin a version or prefix
 
 ```sh
-curl -fsSL https://github.com/ART3121/solar/releases/download/v0.4.6/install.sh \
-  | sh -s -- --version v0.4.6
+curl -fsSL https://github.com/ART3121/solar/releases/download/v0.5.0/install.sh \
+  | sh -s -- --version v0.5.0
 ```
 
 ```sh
@@ -76,7 +76,7 @@ When GitHub CLI is available, an immutable published release can also be
 verified with:
 
 ```sh
-gh release verify v0.4.6 --repo ART3121/solar
+gh release verify v0.5.0 --repo ART3121/solar
 ```
 
 ## External EDA tools

@@ -298,6 +298,12 @@ static int run_asmcomp(int argc, char *argv[])
                !write_in_directory(temporary, name, "0\n")) {
         goto cleanup;
     }
+    if (!omission_requested("translation") &&
+        !write_in_directory(
+            temporary, "trad_opcode.txt", "0 NOP\n1 LOD value\n"
+        )) {
+        goto cleanup;
+    }
     success = true;
 
 cleanup:
@@ -334,6 +340,29 @@ static int run_fake_yosys(void)
     return 0;
 }
 
+static int run_fake_gen_gtkw(int argc, char *argv[])
+{
+    char *layout;
+    size_t length;
+
+    if (argc != 6 || strcmp(argv[1], "--assembly-only") != 0) return 64;
+    length = strlen(argv[2]) + strlen(argv[4]) + strlen(argv[5]) + 128U;
+    layout = malloc(length);
+    if (layout == NULL) return 74;
+    (void)snprintf(
+        layout, length,
+        "[dumpfile] \"%s\"\n[savefile] \"%s\"\n"
+        "^1 %s\n+{Assembly} processor_tb.proc.valr2[15:0]\n",
+        argv[2], argv[5], argv[4]
+    );
+    if (!write_text(argv[3], layout)) {
+        free(layout);
+        return 74;
+    }
+    free(layout);
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     const char *stage = base_name(argv[0]);
@@ -355,6 +384,7 @@ int main(int argc, char *argv[])
     }
     if (strcmp(stage, "appcomp") == 0) return run_appcomp(argc, argv);
     if (strcmp(stage, "asmcomp") == 0) return run_asmcomp(argc, argv);
+    if (strcmp(stage, "gen_gtkw") == 0) return run_fake_gen_gtkw(argc, argv);
     if (strcmp(stage, "iverilog") == 0) return run_fake_iverilog(argc, argv);
     if (strcmp(stage, "vvp") == 0) return run_fake_vvp();
     if (strcmp(stage, "yosys") == 0) return run_fake_yosys();

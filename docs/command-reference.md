@@ -9,7 +9,7 @@ tool failure context use stderr.
 | Command | Behavior |
 | --- | --- |
 | `solar init [--template verilog\|sapho]` | Create a new project without overwriting existing target files. |
-| `solar scan` | Discover conventional RTL/tests and transactionally synchronize managed manifest fields. |
+| `solar scan` | Discover conventional Verilog hierarchy or one CMM processor and transactionally synchronize managed manifest fields. |
 | `solar config set --name N --top T --test X` | Update any combination of the managed settings in one validated transaction. |
 | `solar check` | Parse and validate without executing an EDA tool or changing the project. |
 | `solar doctor [--all]` | Inspect required project tools or every supported/optional tool. |
@@ -18,6 +18,13 @@ tool failure context use stderr.
 `--test` receives a test name shown by `solar build sim --list`, not a filename
 or module top. Format-1 projects must run `solar scan` before configuration
 editing.
+
+For CMM, scan recursively examines `software/` without following symlinks and
+requires one `.cmm` source. Its active `#PRNAME` is written to
+`[project].name`, `[compiler].processor`, and `[synthesis].top`; the discovered
+path is written to `[compiler].source`. Multiple sources or an invalid/missing
+directive leave the manifest untouched. C++ and Assembly scan are not yet
+supported.
 
 ## Build commands
 
@@ -39,7 +46,7 @@ planned stages without starting external tools.
 
 | Command | Behavior |
 | --- | --- |
-| `solar view [test] [--viewer gtkwave\|surfer]` | Open the registered waveform for a test. |
+| `solar view [test] [--viewer gtkwave\|surfer]` | Open the registered waveform; GTKWave automatically applies an available SAPHO Assembly layout. |
 | `solar view --waveform FILE [--viewer ...]` | Open a registered project waveform explicitly. |
 | `solar report` | Display `.solar/state/last-report.txt` without building. |
 | `solar report list [--limit N]` | List immutable stored build reports and their available sidecars. |

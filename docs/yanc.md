@@ -7,9 +7,10 @@ its MIT-licensed sources, builds them from a private staging copy, and installs
 the resulting tools and read-only HDL/macros/headers with Solar. Solar never
 downloads YANC at runtime and never writes into the vendored snapshot.
 
-As of 2026-07-12, Solar's format-2 model, Compiler Service, YANC resolver, YANC
+As of 2026-07-26, Solar's format-2 model, Compiler Service, YANC resolver, YANC
 execution backend, atomic publication, generated Icarus test, and generated
-Yosys synthesis are implemented. CMM, C++, and Assembly have each passed a
+Yosys synthesis are implemented. Generated simulations also prepare an
+Assembly-decoded GTKWave layout. CMM, C++, and Assembly have each passed a
 complete real flow through Solar with the official YANC v5.2 release from a
 project root containing spaces. This is concrete integration evidence, not a
 stable-release or broad language-compatibility claim.
@@ -22,7 +23,7 @@ The bundled snapshot and external comparison were performed against:
   whose tag points to commit
   `792521b699a1f1e6f23a258653a9cf55e251abe1`.
 
-The five toolchain executables in that revision report version `5.2`. The
+The five compiler executables in that revision report version `5.2`. The
 version output is not uniform, so Solar must preserve the complete first line
 instead of parsing one fixed prefix.
 
@@ -70,7 +71,8 @@ yanc/
 |   |-- cpppp
 |   |-- cppcomp
 |   |-- appcomp
-|   `-- asmcomp
+|   |-- asmcomp
+|   `-- gen_gtkw             # optional presentation helper
 |-- HDL/
 `-- Compilers/
     |-- CMMComp/Includes/   # CMM and assembler macros
@@ -128,6 +130,12 @@ directives can determine the names recorded by the assembler. A backend must
 verify that the produced assembly and `app_log.txt` name match
 `[compiler].processor`; it must not search for an unexpected name and publish
 it as success.
+
+For CMM projects, `solar scan` can synchronize that identity before a build.
+It requires one `.cmm` source, reads `#PRNAME`, and atomically updates the
+project name, source path, processor, and synthesis top only after validating
+the complete candidate manifest. It does not execute YANC. C++ and direct
+Assembly source identities remain explicit in `solar.toml`.
 
 ## Verified command lines
 
@@ -311,6 +319,34 @@ Icarus and Yosys must consume a structured generated-artifact result from the
 Compiler Service. They must not scan a YANC workspace or infer filenames on
 their own.
 
+### GTKWave Assembly presentation
+
+The generated VCD already contains a changing numeric `valr2` signal. Showing
+the corresponding instruction text requires the `trad_opcode.txt` emitted by
+`asmcomp` and a GTKWave save layout. After publishing a successful generated
+waveform, Solar invokes the optional YANC helper through the shared runner:
+
+```text
+gen_gtkw --assembly-only \
+  simulation/<processor>_tb.vcd \
+  <staging>/layout.gtkw \
+  .solar/state/waveforms/generated/trad_opcode.txt \
+  .solar/state/waveforms/generated/layout.gtkw
+```
+
+Solar stages the translation and layout together, validates the helper output,
+and atomically replaces `.solar/state/waveforms/generated/`. The public
+`simulation/` directory still receives only the registered VCD/FST. The
+default layout contains only the decoded Assembly track; CMM/C++ source-line,
+variables, I/O, and flags remain raw VCD signals that users may add manually.
+
+`solar view generated` launches GTKWave with the project root as its working
+directory and applies `-a <layout.gtkw>`. Surfer continues to open the raw
+waveform. A missing or incompatible `gen_gtkw` in an explicitly selected
+external root removes stale layout state, keeps the simulation successful, and
+produces an actionable warning. The bundled YANC always builds and installs the
+compatible helper. Formatter logs use the selected test log directory.
+
 ## Publication constraint
 
 The inspected `asmcomp` embeds the path passed through `-p` into generated RTL
@@ -337,9 +373,9 @@ an acceptable substitute for a valid published build.
 - Stop after the first failed compiler stage, preserve that stage's original
   stdout/stderr, and report its log path.
 - Validate every required artifact after `asmcomp`, even when it exits zero.
-- Generated VCD/FST may be opened by Solar's generic GTKWave/Surfer service
-  through `solar view`. Solar neither builds nor installs YANC's optional
-  `gen_gtkw`/`comp2gtkw` helpers.
+- Generated VCD/FST is opened only through `solar view`. Solar bundles
+  `gen_gtkw` for the optional GTKWave Assembly layout but does not bundle or
+  invoke `comp2gtkw`; neither helper launches a GUI during a build.
 
 ## Observed documentation differences
 
@@ -357,7 +393,8 @@ differs:
   `-i`, `-o`, and `-I` forms only. Its `--help` and `cppcomp --help` also exit
   with status 1, while their `--version` operations exit successfully.
 - The README describes six built binaries but lists and packages seven. Solar
-  requires only the five compiler-toolchain executables.
+  requires the five compiler executables for hardware generation and treats
+  `gen_gtkw` as an optional presentation capability in external roots.
 - Direct Assembly lacks the frontend sidecars required by `asmcomp`; Solar's
   tested staging bridge supplies the minimal instruction metadata and a neutral
   PC map derived from `appcomp`, while preserving this upstream divergence.
@@ -399,6 +436,13 @@ Assembly compatibility failure mentioning `n_ins`:
 - Solar does not guess an instruction count or accept malformed metadata;
 - the neutral PC map enables simulation but is not source-level debug data.
 
+`decoded SAPHO Assembly layout is unavailable`:
+
+- the raw VCD remains a valid successful simulation artifact;
+- inspect `.solar/logs/tests/generated/gen_gtkw.stderr.log` when the helper ran;
+- use Solar's bundled YANC or provide an external root with a compatible
+  `gen_gtkw --assembly-only` implementation.
+
 ## Current limitations
 
 - The three language flows were validated with selected official fixtures on
@@ -408,5 +452,6 @@ Assembly compatibility failure mentioning `n_ins`:
   `SOLAR_TEST_YANC_ROOT` can explicitly substitute another root.
 - Only one generated processor and one implicit `generated` test are supported
   in the current single-processor flow.
-- Multi-processor YANC, automatic formatted-waveform helpers, and incremental
-  caching remain outside the current implementation.
+- Multi-processor YANC, source-line/variable waveform curation, complex-value
+  `comp2gtkw` filtering, and incremental caching remain outside the current
+  implementation.

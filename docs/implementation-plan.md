@@ -1,5 +1,129 @@
 # Solar implementation plan
 
+## SAPHO CMM project scan synchronization (2026-07-26)
+
+Status: complete and installed locally.
+
+### Current state and decisions
+
+- `solar scan` currently rejects every non-Verilog project, while the CMM
+  source itself carries the processor identity in `#PRNAME`. A changed or
+  renamed CMM file can therefore leave `[compiler].source`,
+  `[compiler].processor`, `[project].name`, and `[synthesis].top` stale.
+- This slice covers CMM only. C++ and direct Assembly retain explicit manifest
+  configuration until their source-specific discovery behavior is requested.
+- Scan discovers exactly one regular `.cmm` source below `software/`, without
+  following symbolic links. A safe, existing explicitly configured CMM path is
+  also accepted for unconventional layouts.
+- `#PRNAME` is the source of truth. Its exact identifier becomes the project
+  name, compiler processor, and synthesis top. Multiple sources or ambiguous,
+  missing, duplicate, or unsafe processor directives fail without modifying
+  `solar.toml`.
+- The manifest candidate preserves unrelated text, is parsed and semantically
+  validated, and is atomically installed only after validation succeeds.
+
+### Verifiable milestones
+
+1. Add an isolated CMM identity reader and deterministic source discovery with
+   tests for comments, strings, invalid directives, symlinks, paths with
+   spaces, zero sources, and multiple sources.
+2. Add format-2 CMM synchronization to Scan Core and expose the discovered
+   source/processor in `SolarScanResult` with explicit ownership.
+3. Make project validation diagnose a manifest/CMM `#PRNAME` mismatch with a
+   `solar scan` hint, without executing YANC.
+4. Exercise idempotence, atomic rollback, CLI output, fake-YANC consumption,
+   the real bundled CMM flow, GCC, Clang, and sanitizers.
+
+### Acceptance and risks
+
+- After editing `#PRNAME` or renaming the only CMM source, one `solar scan`
+  makes generation, the implicit `generated` test, and synthesis agree on the
+  new processor and source path.
+- Verilog scan behavior remains byte-for-byte compatible outside its existing
+  managed fields. C++ and Assembly continue to return an explicit unsupported
+  scan diagnostic.
+- The scanner must not mistake directives inside comments or strings for
+  active CMM syntax, traverse symlinks, choose among multiple processors, run
+  external tools, or partially update the manifest.
+
+### Verification evidence
+
+- GCC Debug, Clang Debug, and ASan/UBSan each built without new Solar warnings
+  and passed all 39 registered tests; Fish completion syntax was the sole
+  explicit skip because Fish is unavailable. Sanitizer execution used
+  `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer cannot initialize under
+  the executor's `ptrace` policy.
+- A real bundled-YANC copy of `examples/yanc-cmm` moved its source to
+  `software/source files/renamed processor.cmm` and changed `#PRNAME` to
+  `scanned_cpu`. Scan synchronized all four managed values, check selected
+  `scanned_cpu_tb`, generation published `software/scanned_cpu.asm`, Icarus
+  published `simulation/scanned_cpu_tb.vcd`, and Yosys published
+  `hardware/scanned_cpu_netlist.v` plus `statistics.txt`.
+- A Release build was installed under `/home/arthur/.local`; the installed
+  `solar 0.4.6` repeated the same CMM scan as an idempotent unchanged operation.
+
+## SAPHO instruction waveform presentation (2026-07-26)
+
+Status: complete and validated with real bundled YANC CMM, C++, and Assembly.
+
+### Discovery and decisions
+
+- Real YANC CMM simulation produces a valid VCD: `valr2` and `linetabs` are
+  present and change during execution. The missing behavior is presentation,
+  because Solar currently opens the raw VCD without YANC's opcode translation
+  table and GTKWave save layout.
+- Keep simulation and viewing separate. `solar build sim` will prepare an
+  internal, replaceable layout but will never launch a GUI; `solar view` will
+  apply that layout automatically only for GTKWave.
+- The default SAPHO layout will contain the decoded Assembly instruction track
+  only. Source-line correlation and curated variables remain outside this
+  correction, while every raw signal remains available in the VCD.
+- A missing or incompatible formatter in an explicitly selected external YANC
+  root is a presentation warning, not a simulation failure. The bundled YANC
+  will include the compatible formatter.
+
+### Implementation and acceptance
+
+1. Extend generated-artifact and test-result roles with the opcode translation,
+   optional layout path, and structured non-fatal presentation diagnostic.
+2. Add a compiler-backend presentation callback. The YANC implementation will
+   invoke `gen_gtkw --assembly-only` through the shared runner and atomically
+   publish its layout and translation below `.solar/state/waveforms/<test>/`.
+3. Add an options-based waveform-opening API. GTKWave will receive the VCD and
+   `-a <layout>` from the project root; Surfer and ordinary Verilog waveforms
+   retain their raw-waveform behavior.
+4. Cover formatter success/failure, stale-layout replacement, paths with
+   spaces, exact viewer argv, and real CMM/C++/Assembly VCD activity. Re-run
+   GCC, Clang, sanitizer, complete CTest, and available graphical smoke checks.
+
+### Verification evidence
+
+- GCC Debug and Clang Debug each passed all 39 registered tests; Fish syntax
+  was the sole explicit skip because Fish is unavailable.
+- ASan/UBSan passed the same 39-test matrix with
+  `ASAN_OPTIONS=detect_leaks=0`; LeakSanitizer cannot initialize under the
+  executor's `ptrace` policy.
+- The real bundled YANC CMM, C++, and Assembly integrations each verified a
+  changing `valr2` instruction signal, a non-empty opcode translation, an
+  Assembly-only layout, and the exact GTKWave layout invocation from the
+  project root.
+- Formatter absence was exercised separately with fake tools: simulation and
+  the public waveform remained successful, a structured warning was retained,
+  and stale presentation state was removed.
+
+### Real GTKWave launch correction
+
+- A real GTKWave 3.3.125 probe exposed that `--zoom-fit` and
+  `--left-justify` are not GTKWave options. The original fake viewer accepted
+  arbitrary argv, so it proved dispatch but concealed the immediate real
+  process failure.
+- Use only GTKWave's documented argv: `--dark -a <layout> <waveform>`. Keep an
+  exact regression for this ordering and require a real GUI launch before
+  presenting the correction as visually validated.
+- The installed Release binary subsequently launched GTKWave 3.3.127 through
+  `solar view`; the real process remained active with that exact argv and the
+  generated SAPHO Assembly layout.
+
 ## Public documentation website integration (2026-07-23)
 
 ### Scope and decisions

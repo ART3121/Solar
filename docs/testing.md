@@ -48,8 +48,10 @@ The registered suite covers:
   isolated build paths, explicit workspace-whitespace rejection, and a cocotb
   2.x runner bridge without shell command construction;
 - detached GTKWave and Surfer launch, exact viewer argv with spaced waveform
-  paths, and non-interactive, headless, missing-tool, invalid-viewer, and
-  `SOLAR_NO_VIEWER` paths;
+  paths, optional layout/project working directory, and non-interactive,
+  headless, missing-tool, invalid-viewer, and `SOLAR_NO_VIEWER` paths;
+- YANC Assembly-only `.gtkw` generation, opcode translation, non-fatal missing
+  formatter fallback, and stale-layout invalidation;
 - Test Service selection, profiles, isolation, `--all`, failure summaries, and
   explicit simulation compile/runtime/logical failure classification, including
   a passing process that produces no optional VCD/FST;
@@ -65,6 +67,7 @@ The registered suite covers:
 - recursive conventional Verilog/SystemVerilog discovery, stable ordering,
   symlink exclusion, parameterized module-instantiation graphs, synthesis and
   testbench root inference, transactional `solar scan`, top replacement,
+  CMM source/`#PRNAME` synchronization and ambiguity rollback,
   ambiguity rollback, idempotence, and RTL-only synchronization after removing
   the last conventionally discovered testbench;
 - `solar check` presentation of synthesis top, explicit/implicit default test,
@@ -416,3 +419,28 @@ The local Arch Linux package is functional evidence, not the portable release
 asset: its locally built bundled YANC binaries require GLIBC 2.38. The hosted
 tag workflow rebuilds on Ubuntu 22.04 and refuses publication unless Solar and
 every bundled YANC executable stay at or below the declared GLIBC 2.35 ceiling.
+
+## SAPHO instruction-waveform evidence
+
+On 2026-07-26, the GCC Debug, Clang Debug, and ASan/UBSan matrices each passed
+all 39 registered tests; Fish syntax was the only explicit skip. Sanitizers
+used `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer cannot initialize under
+the executor's `ptrace` policy.
+
+The real bundled-YANC CMM, C++, and Assembly integrations verified that each
+published VCD contains a changing `valr2` instruction signal. They also
+required a non-empty copied opcode table, an Assembly-only GTKWave layout, and
+the exact `solar view` GTKWave argv and project working directory through a
+deterministic viewer helper. Fake-tool regressions separately prove that an
+unavailable formatter removes stale presentation state and produces a warning
+without failing simulation or deleting the public waveform. A temporary
+`cmake --install` prefix included an executable `gen_gtkw` with the documented
+`--assembly-only` interface.
+
+A real-viewer follow-up found that the initial fake launcher accepted the
+nonexistent GTKWave options `--zoom-fit` and `--left-justify`. GTKWave 3.3.127
+exited immediately while Solar's detached launcher had already reported a
+successful `exec`. The corrected regression requires exactly
+`gtkwave --dark -a <layout> <waveform>`. After installing the corrected Release
+binary, `solar view` launched a real GTKWave process that remained active with
+the generated SAPHO VCD and Assembly layout.

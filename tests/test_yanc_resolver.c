@@ -20,8 +20,9 @@ enum {
     TOOL_CPPCOMP = 1U << 2,
     TOOL_APPCOMP = 1U << 3,
     TOOL_ASMCOMP = 1U << 4,
+    TOOL_GEN_GTKW = 1U << 5,
     TOOL_ALL = TOOL_CMMCOMP | TOOL_CPPPP | TOOL_CPPCOMP |
-               TOOL_APPCOMP | TOOL_ASMCOMP
+               TOOL_APPCOMP | TOOL_ASMCOMP | TOOL_GEN_GTKW
 };
 
 typedef struct {
@@ -159,6 +160,8 @@ static bool create_tools(
         !create_tool(root, "appcomp", self_path)) return false;
     if ((tool_mask & TOOL_ASMCOMP) != 0U &&
         !create_tool(root, "asmcomp", self_path)) return false;
+    if ((tool_mask & TOOL_GEN_GTKW) != 0U &&
+        !create_tool(root, "gen_gtkw", self_path)) return false;
     return true;
 }
 
@@ -352,7 +355,8 @@ static int test_environment_release_precedence(const char *self_path)
                toolchain.headers_directory == NULL ||
                toolchain.cmmcomp == NULL || toolchain.cpppp == NULL ||
                toolchain.cppcomp == NULL || toolchain.appcomp == NULL ||
-               toolchain.asmcomp == NULL || toolchain.version == NULL ||
+               toolchain.asmcomp == NULL || toolchain.gen_gtkw == NULL ||
+               toolchain.version == NULL ||
                strcmp(toolchain.version, "cmmcomp (YANC) 5.2-fake") != 0) {
         failed = report_failure(test_name, "release resolution was incorrect");
     }
@@ -407,7 +411,7 @@ static int test_checkout_with_spaces(const char *self_path)
                toolchain.headers_directory != NULL ||
                toolchain.cmmcomp == NULL || toolchain.appcomp == NULL ||
                toolchain.asmcomp == NULL || toolchain.cpppp != NULL ||
-               toolchain.cppcomp != NULL) {
+               toolchain.cppcomp != NULL || toolchain.gen_gtkw != NULL) {
         failed = report_failure(
             test_name, "CMM incorrectly required optional C++ components"
         );

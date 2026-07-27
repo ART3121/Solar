@@ -4,6 +4,37 @@ Solar Core is the reusable C17 boundary used by the CLI. Installed public
 headers live below `include/solar/`, and `solar/solar.h` includes the complete
 supported surface.
 
+## Project scan
+
+`solar_scan_project()` returns a `SolarScanResult` for either conventional
+Verilog discovery or CMM identity synchronization. Inspect `kind` before using
+the mode-specific fields. A successful CMM result owns `compiler_source` and
+`processor`; release them with `solar_scan_result_free()`. Verilog count fields
+retain their existing meaning. The operation never invokes an EDA tool and
+leaves `solar.toml` unchanged on every error path.
+
+## Generated waveform presentation
+
+`SolarGeneratedArtifacts.instruction_translation_path` owns an optional
+backend-produced opcode table. After a generated simulation,
+`solar_compiler_prepare_waveform_layout()` dispatches presentation work to the
+selected compiler backend and returns an owned layout path on success.
+`solar_compiler_find_waveform_layout()` performs the separate read-only lookup
+used by frontends; it never invokes the formatter or rebuilds the waveform and
+returns success with a null path when no current layout exists.
+
+`SolarTestResult.waveform_layout_path` owns the prepared layout path.
+`waveform_layout_diagnostic` may contain a warning while the main test result
+remains successful; callers should present that warning without treating the
+raw waveform as failed.
+
+`SolarWaveformOpenOptions` supplies a viewer, optional layout, optional child
+working directory, and interactive policy to
+`solar_waveform_open_with_options()`. Initialize it with
+`solar_waveform_open_options_init()`. All option paths are borrowed for the
+call. The older `solar_waveform_open()` and
+`solar_waveform_open_with_viewer()` functions remain compatibility wrappers.
+
 ## Generic Synthesis Statistics
 
 `solar/synthesis_statistics.h` exposes normalized generic statistics from the

@@ -2,7 +2,7 @@
 
 set -eu
 
-SOLAR_RELEASE_VERSION="0.4.6"
+SOLAR_RELEASE_VERSION="0.5.0"
 SOLAR_REPOSITORY="ART3121/solar"
 SOLAR_ARCHIVE="solar-linux-x86_64.tar.gz"
 SOLAR_MANIFEST_RELATIVE="share/solar/install-manifest.txt"
@@ -18,7 +18,7 @@ backup_list=""
 usage()
 {
     cat <<'EOF'
-Usage: install.sh [--version v0.4.6] [--prefix PATH] [--uninstall]
+Usage: install.sh [--version v0.5.0] [--prefix PATH] [--uninstall]
 
 Install the Solar Linux x86_64 release below ~/.local by default.
 The installer does not use sudo, install EDA tools, or edit shell files.
@@ -217,7 +217,7 @@ case "$requested_version" in
         release_base="https://github.com/$SOLAR_REPOSITORY/releases/download/$requested_version"
         ;;
     *)
-        fail "version must be latest or a tag such as v0.4.6"
+        fail "version must be latest or a tag such as v0.5.0"
         ;;
 esac
 

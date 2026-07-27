@@ -74,6 +74,7 @@ void solar_test_result_free(SolarTestResult *result)
     free(result->profile_name);
     free(result->executable_path);
     free(result->waveform_path);
+    free(result->waveform_layout_path);
     free(result->output);
     solar_test_result_init(result);
 }
@@ -810,6 +811,16 @@ static SolarResult publish_waveform(
     return result;
 }
 
+static void record_layout_warning(
+    SolarTestResult *test_result,
+    SolarResult layout_result
+)
+{
+    test_result->waveform_layout_diagnostic = layout_result.diagnostic;
+    test_result->waveform_layout_diagnostic.severity =
+        SOLAR_DIAGNOSTIC_WARNING;
+}
+
 SolarResult solar_test_run_with_artifacts_and_progress(
     const SolarProject *project,
     const char *test_name,
@@ -917,6 +928,19 @@ SolarResult solar_test_run_with_artifacts_and_progress(
         result = publish_waveform(
             project, profile, test, &request, test_result
         );
+        if (result.status == SOLAR_STATUS_OK &&
+            test->kind == SOLAR_TEST_GENERATED &&
+            test_result->waveform_path != NULL) {
+            SolarResult layout_result = solar_compiler_prepare_waveform_layout(
+                project, active_artifacts, test->name,
+                test_result->waveform_path,
+                &test_result->waveform_layout_path
+            );
+
+            if (layout_result.status != SOLAR_STATUS_OK) {
+                record_layout_warning(test_result, layout_result);
+            }
+        }
         test_result->publication_duration_ns = elapsed_since(
             publication_started
         );

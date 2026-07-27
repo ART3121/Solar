@@ -1,6 +1,6 @@
 # Solar roadmap
 
-## Current v0.4.6 implementation
+## Current v0.5.0 implementation
 
 The current development tree contains:
 
@@ -128,8 +128,8 @@ The current milestone does not include an HDL editor, LSP, FPGA programming,
 nextpnr, OpenFPGALoader, OpenLane, ASIC implementation, package manager,
 automatic downloads/installations, parallel execution, timeouts, coverage,
 dynamic plugins, VHDL, YANC multiprocessor scripts, automatic use of
-`gen_gtkw`/`comp2gtkw`, incremental cache, database, daemon, web UI, or Aurora
-integration.
+`comp2gtkw`, source-line/variable GTKWave curation, incremental cache,
+database, daemon, web UI, or Aurora integration.
 
 ## Known design limits
 

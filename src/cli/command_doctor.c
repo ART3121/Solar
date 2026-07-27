@@ -48,6 +48,7 @@ static void print_yanc_toolchain(const SolarYancToolchain *toolchain)
         "  cppcomp:   %s\n"
         "  appcomp:   %s\n"
         "  asmcomp:   %s\n"
+        "  gen_gtkw:  %s (optional waveform formatter)\n"
         "  HDL:       %s\n"
         "  macros:    %s\n"
         "  headers:   %s\n",
@@ -59,6 +60,7 @@ static void print_yanc_toolchain(const SolarYancToolchain *toolchain)
         availability(toolchain->cppcomp),
         availability(toolchain->appcomp),
         availability(toolchain->asmcomp),
+        availability(toolchain->gen_gtkw),
         availability(toolchain->hdl_directory),
         availability(toolchain->macros_directory),
         availability(toolchain->headers_directory)

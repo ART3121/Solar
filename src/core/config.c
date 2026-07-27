@@ -1,5 +1,7 @@
 #include "solar/config.h"
 
+#include "cmm_source_internal.h"
+
 #include "solar/backend.h"
 #include "solar/filesystem.h"
 
@@ -2006,26 +2008,7 @@ static SolarResult validate_profile_values(
 
 static bool is_processor_name(const char *name)
 {
-    const unsigned char *cursor = (const unsigned char *)name;
-
-    if (name == NULL || name[0] == '\0' ||
-        strlen(name) > SOLAR_SAFE_NAME_LENGTH_LIMIT) {
-        return false;
-    }
-    if (!((*cursor >= 'A' && *cursor <= 'Z') ||
-          (*cursor >= 'a' && *cursor <= 'z') || *cursor == '_')) {
-        return false;
-    }
-    cursor++;
-    while (*cursor != '\0') {
-        if (!((*cursor >= 'A' && *cursor <= 'Z') ||
-              (*cursor >= 'a' && *cursor <= 'z') ||
-              (*cursor >= '0' && *cursor <= '9') || *cursor == '_')) {
-            return false;
-        }
-        cursor++;
-    }
-    return true;
+    return solar_processor_name_is_safe(name);
 }
 
 static bool is_safe_absolute_root(const char *path)

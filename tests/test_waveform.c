@@ -61,6 +61,27 @@ static int record_matches(
     return matches ? 1 : 0;
 }
 
+static int layout_record_matches(
+    const char *record,
+    const char *viewer,
+    const char *waveform,
+    const char *layout,
+    const char *working_directory
+)
+{
+    FILE *file = fopen(record, "r");
+    bool matches;
+
+    if (file == NULL) return 0;
+    matches = read_expected_line(file, viewer) &&
+        read_expected_line(file, "--dark") &&
+        read_expected_line(file, "-a") && read_expected_line(file, layout) &&
+        read_expected_line(file, waveform) &&
+        read_expected_line(file, working_directory) && fgetc(file) == EOF;
+    (void)fclose(file);
+    return matches ? 1 : 0;
+}
+
 static int wait_for_record(
     const char *path,
     const char *viewer,
@@ -85,6 +106,7 @@ int main(int argc, char **argv)
     char *gtkwave = NULL;
     char *surfer = NULL;
     char *waveform = NULL;
+    char *layout = NULL;
     char *record = NULL;
     char *old_path = NULL;
     bool launched = false;
@@ -95,11 +117,13 @@ int main(int argc, char **argv)
     gtkwave = join_path(root, "gtkwave");
     surfer = join_path(root, "surfer");
     waveform = join_path(root, "wave output.fst");
+    layout = join_path(root, "SAPHO layout.gtkw");
     record = join_path(root, "viewer.record");
     old_path = getenv("PATH") == NULL ? NULL : strdup(getenv("PATH"));
-    if (gtkwave == NULL || surfer == NULL || waveform == NULL || record == NULL ||
+    if (gtkwave == NULL || surfer == NULL || waveform == NULL || layout == NULL ||
+        record == NULL ||
         symlink(argv[1], gtkwave) != 0 || symlink(argv[1], surfer) != 0 ||
-        write_file(waveform) != 0 ||
+        write_file(waveform) != 0 || write_file(layout) != 0 ||
         setenv("PATH", root, 1) != 0 || setenv("DISPLAY", ":test", 1) != 0 ||
         setenv("SOLAR_VIEWER_RECORD", record, 1) != 0) goto cleanup;
     result = solar_waveform_open(waveform, false, &launched);
@@ -110,6 +134,53 @@ int main(int argc, char **argv)
     if (result.status != SOLAR_STATUS_OK || !launched) goto cleanup;
     if (wait_for_record(record, "gtkwave", waveform) != 0) goto cleanup;
     if (unlink(record) != 0) goto cleanup;
+    {
+        SolarWaveformOpenOptions options;
+        int attempts;
+
+        solar_waveform_open_options_init(&options);
+        options.viewer = SOLAR_WAVEFORM_VIEWER_GTKWAVE;
+        options.working_directory = root;
+        options.layout_path = layout;
+        options.interactive = true;
+        if (setenv("SOLAR_VIEWER_RECORD_CWD", "1", 1) != 0) goto cleanup;
+        launched = false;
+        result = solar_waveform_open_with_options(
+            waveform, &options, &launched
+        );
+        if (result.status != SOLAR_STATUS_OK || !launched) {
+            (void)fprintf(
+                stderr, "layout launch failed: %s\n",
+                result.diagnostic.message
+            );
+            goto cleanup;
+        }
+        for (attempts = 0; attempts < 100; attempts++) {
+            const struct timespec delay = {0, 10000000L};
+
+            if (layout_record_matches(
+                    record, "gtkwave", waveform, layout, root
+                )) break;
+            (void)nanosleep(&delay, NULL);
+        }
+        if (!layout_record_matches(
+                record, "gtkwave", waveform, layout, root
+            )) {
+            FILE *debug = fopen(record, "r");
+            int character;
+
+            (void)fprintf(stderr, "layout viewer argv did not match:\n");
+            if (debug != NULL) {
+                while ((character = fgetc(debug)) != EOF) {
+                    (void)fputc(character, stderr);
+                }
+                (void)fclose(debug);
+            }
+            goto cleanup;
+        }
+        (void)unsetenv("SOLAR_VIEWER_RECORD_CWD");
+        if (unlink(record) != 0) goto cleanup;
+    }
     launched = false;
     result = solar_waveform_open_with_viewer(
         waveform, SOLAR_WAVEFORM_VIEWER_SURFER, true, &launched
@@ -134,14 +205,17 @@ cleanup:
     if (old_path != NULL) (void)setenv("PATH", old_path, 1);
     else (void)unsetenv("PATH");
     (void)unsetenv("SOLAR_VIEWER_RECORD");
+    (void)unsetenv("SOLAR_VIEWER_RECORD_CWD");
     if (gtkwave != NULL) (void)unlink(gtkwave);
     if (surfer != NULL) (void)unlink(surfer);
     if (waveform != NULL) (void)unlink(waveform);
+    if (layout != NULL) (void)unlink(layout);
     if (record != NULL) (void)unlink(record);
     if (root != NULL) (void)rmdir(root);
     free(old_path);
     free(record);
     free(waveform);
+    free(layout);
     free(surfer);
     free(gtkwave);
     return failed;

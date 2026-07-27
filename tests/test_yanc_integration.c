@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static char *join_path(const char *left, const char *right)
@@ -63,6 +64,218 @@ static char *read_text_file(const char *path)
         return NULL;
     }
     return text;
+}
+
+static int run_solar_arguments(
+    const char *solar,
+    const char *root,
+    const char *const arguments[],
+    const char *description,
+    const char *expected_stdout
+);
+
+static bool vector_value_changed(
+    const char *definitions_end,
+    const char *identifier
+)
+{
+    const char *cursor = definitions_end;
+    char first_value[256] = "";
+
+    while ((cursor = strchr(cursor, '\n')) != NULL) {
+        const char *space;
+        const char *line_end;
+        size_t value_length;
+        size_t identifier_length = strlen(identifier);
+
+        cursor++;
+        if (*cursor != 'b') continue;
+        space = strchr(cursor, ' ');
+        line_end = strchr(cursor, '\n');
+        if (space == NULL || line_end == NULL || space >= line_end ||
+            (size_t)(line_end - space - 1) != identifier_length ||
+            strncmp(space + 1, identifier, identifier_length) != 0) {
+            continue;
+        }
+        value_length = (size_t)(space - cursor - 1);
+        if (value_length == 0U || value_length >= sizeof(first_value)) continue;
+        if (first_value[0] == '\0') {
+            (void)memcpy(first_value, cursor + 1, value_length);
+            first_value[value_length] = '\0';
+        } else if (strlen(first_value) != value_length ||
+                   strncmp(first_value, cursor + 1, value_length) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool vcd_has_changing_valr2(const char *vcd)
+{
+    const char *definitions_end = strstr(vcd, "$enddefinitions");
+    const char *cursor = vcd;
+    char identifier[64];
+
+    if (definitions_end == NULL) return false;
+    while (cursor < definitions_end) {
+        const char *line_end = strchr(cursor, '\n');
+        char type[32];
+        char reference[128];
+        unsigned int width;
+
+        if (line_end == NULL || line_end > definitions_end) break;
+        if (sscanf(
+                cursor, "$var %31s %u %63s %127s",
+                type, &width, identifier, reference
+            ) == 4 && strcmp(reference, "valr2") == 0 && width > 1U) {
+            return vector_value_changed(definitions_end, identifier);
+        }
+        cursor = line_end + 1;
+    }
+    return false;
+}
+
+static int verify_instruction_waveform(const char *root)
+{
+    char *waveform_path = join_path(
+        root, "simulation/sapho_demo_tb.vcd"
+    );
+    char *layout_path = join_path(
+        root, ".solar/state/waveforms/generated/layout.gtkw"
+    );
+    char *translation_path = join_path(
+        root, ".solar/state/waveforms/generated/trad_opcode.txt"
+    );
+    char *waveform = waveform_path == NULL
+        ? NULL : read_text_file(waveform_path);
+    char *layout = layout_path == NULL ? NULL : read_text_file(layout_path);
+    char *translation = translation_path == NULL
+        ? NULL : read_text_file(translation_path);
+    int failed = 0;
+
+    if (waveform == NULL || !vcd_has_changing_valr2(waveform) ||
+        layout == NULL || strstr(layout, "{Assembly}") == NULL ||
+        strstr(layout, "trad_opcode.txt") == NULL ||
+        strstr(layout, "C+-") != NULL || strstr(layout, "Variables") != NULL ||
+        translation == NULL || translation[0] == '\0') {
+        (void)fprintf(
+            stderr,
+            "YANC instruction waveform lacks changing Assembly presentation\n"
+        );
+        failed = 1;
+    }
+    free(translation);
+    free(layout);
+    free(waveform);
+    free(translation_path);
+    free(layout_path);
+    free(waveform_path);
+    return failed;
+}
+
+static bool viewer_record_matches(
+    const char *record,
+    const char *waveform,
+    const char *layout,
+    const char *root
+)
+{
+    size_t length;
+    char *expected;
+    bool matches;
+
+    if (record == NULL) return false;
+    length = strlen(waveform) + strlen(layout) + strlen(root) + 40U;
+    expected = malloc(length);
+    if (expected == NULL) return false;
+    (void)snprintf(
+        expected, length,
+        "gtkwave\n--dark\n-a\n%s\n%s\n%s\n",
+        layout, waveform, root
+    );
+    matches = strcmp(record, expected) == 0;
+    free(expected);
+    return matches;
+}
+
+static int verify_solar_view(
+    const char *solar,
+    const char *root,
+    const char *viewer_helper
+)
+{
+    const char *arguments[] = {solar, "view", "generated", NULL};
+    char directory_template[] = "/tmp/solar yanc viewer-XXXXXX";
+    char *tool_directory = mkdtemp(directory_template);
+    char *viewer = tool_directory == NULL
+        ? NULL : join_path(tool_directory, "gtkwave");
+    char *record = join_path(root, ".solar/viewer.record");
+    char *waveform = join_path(root, "simulation/sapho_demo_tb.vcd");
+    char *layout = join_path(
+        root, ".solar/state/waveforms/generated/layout.gtkw"
+    );
+    const char *current_path = getenv("PATH");
+    char *saved_path = current_path == NULL ? NULL : strdup(current_path);
+    size_t combined_length = tool_directory == NULL || saved_path == NULL
+        ? 0U : strlen(tool_directory) + strlen(saved_path) + 2U;
+    char *combined_path = combined_length == 0U
+        ? NULL : malloc(combined_length);
+    char *record_text = NULL;
+    int command_code = 1;
+    int attempts;
+
+    if (tool_directory == NULL || viewer == NULL || record == NULL ||
+        waveform == NULL || layout == NULL || saved_path == NULL ||
+        combined_path == NULL ||
+        snprintf(
+            combined_path, combined_length, "%s:%s",
+            tool_directory, saved_path
+        ) < 0 ||
+        symlink(viewer_helper, viewer) != 0 ||
+        setenv("PATH", combined_path, 1) != 0 ||
+        setenv("DISPLAY", ":solar-test", 1) != 0 ||
+        setenv("SOLAR_VIEWER_RECORD", record, 1) != 0 ||
+        setenv("SOLAR_VIEWER_RECORD_CWD", "1", 1) != 0) {
+        goto cleanup;
+    }
+    command_code = run_solar_arguments(
+        solar, root, arguments, "view generated", "GTKWave layout:"
+    );
+    for (attempts = 0; command_code == 0 && attempts < 100; attempts++) {
+        const struct timespec delay = {0, 10000000L};
+
+        free(record_text);
+        record_text = read_text_file(record);
+        if (viewer_record_matches(
+                record_text, waveform, layout, root
+            )) break;
+        (void)nanosleep(&delay, NULL);
+    }
+    if (command_code == 0 && !viewer_record_matches(
+            record_text, waveform, layout, root
+        )) {
+        (void)fprintf(
+            stderr, "solar view did not apply the generated YANC layout\n"
+        );
+        command_code = 1;
+    }
+
+cleanup:
+    if (saved_path != NULL) (void)setenv("PATH", saved_path, 1);
+    (void)unsetenv("SOLAR_VIEWER_RECORD_CWD");
+    (void)unsetenv("SOLAR_VIEWER_RECORD");
+    (void)unsetenv("DISPLAY");
+    if (record != NULL) (void)unlink(record);
+    if (viewer != NULL) (void)unlink(viewer);
+    if (tool_directory != NULL) (void)rmdir(tool_directory);
+    free(record_text);
+    free(combined_path);
+    free(saved_path);
+    free(layout);
+    free(waveform);
+    free(record);
+    free(viewer);
+    return command_code;
 }
 
 static int run_solar_arguments(
@@ -282,6 +495,8 @@ static int verify_artifacts(const char *root, const char *template_name)
         ".solar/tmp/tests/generated/simulation.vvp",
         ".solar/tmp/tests/generated/output_0.txt",
         "simulation/sapho_demo_tb.vcd",
+        ".solar/state/waveforms/generated/layout.gtkw",
+        ".solar/state/waveforms/generated/trad_opcode.txt",
         ".solar/tmp/synth/synthesis.ys",
         "hardware/sapho_demo_netlist.v",
         "hardware/statistics.txt"
@@ -317,7 +532,7 @@ static int verify_artifacts(const char *root, const char *template_name)
         );
         return 1;
     }
-    return 0;
+    return verify_instruction_waveform(root);
 }
 
 int main(int argc, char **argv)
@@ -326,6 +541,7 @@ int main(int argc, char **argv)
     char directory_template[] = "/tmp/solar yanc real-XXXXXX";
     char *directory;
     char *solar;
+    char *viewer_helper = NULL;
     char *assembly_source_path = NULL;
     char *assembly_before = NULL;
     char *assembly_after = NULL;
@@ -333,9 +549,10 @@ int main(int argc, char **argv)
     int command_code;
     int return_code = 1;
 
-    if (argc != 3) {
+    if (argc != 4) {
         (void)fprintf(
-            stderr, "expected solar executable and YANC template name\n"
+            stderr,
+            "expected Solar, YANC template name, and viewer helper\n"
         );
         return 1;
     }
@@ -348,7 +565,12 @@ int main(int argc, char **argv)
     }
     if (setenv("SOLAR_YANC_ROOT", test_root, 1) != 0) return 1;
     solar = realpath(argv[1], NULL);
-    if (solar == NULL) return 1;
+    viewer_helper = realpath(argv[3], NULL);
+    if (solar == NULL || viewer_helper == NULL) {
+        free(viewer_helper);
+        free(solar);
+        return 1;
+    }
     directory = mkdtemp(directory_template);
     if (directory == NULL) {
         free(solar);
@@ -448,6 +670,9 @@ int main(int argc, char **argv)
         }
     }
     if (return_code == 0) {
+        return_code = verify_solar_view(solar, directory, viewer_helper);
+    }
+    if (return_code == 0) {
         return_code = verify_yanc_identifier_limit(solar, directory, argv[2]);
     }
 
@@ -456,6 +681,7 @@ cleanup:
     free(assembly_after);
     free(assembly_before);
     free(assembly_source_path);
+    free(viewer_helper);
     free(solar);
     return return_code;
 }

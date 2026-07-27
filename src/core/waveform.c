@@ -52,6 +52,13 @@ const char *solar_waveform_viewer_name(SolarWaveformViewer viewer)
     return definition == NULL ? "unknown" : definition->display_name;
 }
 
+void solar_waveform_open_options_init(SolarWaveformOpenOptions *options)
+{
+    if (options == NULL) return;
+    (void)memset(options, 0, sizeof(*options));
+    options->viewer = SOLAR_WAVEFORM_VIEWER_GTKWAVE;
+}
+
 static bool disabled_by_environment(void)
 {
     const char *disabled = getenv("SOLAR_NO_VIEWER");
@@ -94,14 +101,26 @@ static void report_child_error(int descriptor, int error_number)
 
 static _Noreturn void detached_viewer(
     int error_descriptor,
-    const char *executable,
-    const char *waveform_path
+    const SolarViewerDefinition *definition,
+    const char *waveform_path,
+    const char *working_directory,
+    const char *layout_path
 )
 {
-    const char *arguments[] = {executable, waveform_path, NULL};
+    const char *plain_arguments[] = {
+        definition->executable, waveform_path, NULL
+    };
+    const char *layout_arguments[] = {
+        definition->executable,
+        "--dark", "-a", layout_path, waveform_path, NULL
+    };
+    const char *const *arguments = layout_path != NULL &&
+        definition->viewer == SOLAR_WAVEFORM_VIEWER_GTKWAVE
+        ? layout_arguments : plain_arguments;
     int null_descriptor = open("/dev/null", O_RDWR | O_CLOEXEC);
 
-    if (null_descriptor < 0 ||
+    if ((working_directory != NULL && chdir(working_directory) != 0) ||
+        null_descriptor < 0 ||
         dup2(null_descriptor, STDIN_FILENO) < 0 ||
         dup2(null_descriptor, STDOUT_FILENO) < 0 ||
         dup2(null_descriptor, STDERR_FILENO) < 0) {
@@ -116,7 +135,9 @@ static _Noreturn void detached_viewer(
 
 static SolarResult launch_detached(
     const SolarViewerDefinition *definition,
-    const char *waveform_path
+    const char *waveform_path,
+    const char *working_directory,
+    const char *layout_path
 )
 {
     int descriptors[2] = {-1, -1};
@@ -161,7 +182,8 @@ static SolarResult launch_detached(
         }
         if (viewer > 0) _exit(0);
         detached_viewer(
-            descriptors[1], definition->executable, waveform_path
+            descriptors[1], definition, waveform_path,
+            working_directory, layout_path
         );
     }
     (void)close(descriptors[1]);
@@ -201,25 +223,25 @@ static SolarResult launch_detached(
     return solar_result_ok();
 }
 
-SolarResult solar_waveform_open_with_viewer(
+SolarResult solar_waveform_open_with_options(
     const char *waveform_path,
-    SolarWaveformViewer viewer,
-    bool interactive,
+    const SolarWaveformOpenOptions *options,
     bool *launched_out
 )
 {
-    const SolarViewerDefinition *definition = viewer_definition(viewer);
+    const SolarViewerDefinition *definition;
     struct stat information;
     SolarResult result;
 
     if (launched_out != NULL) *launched_out = false;
-    if (waveform_path == NULL || launched_out == NULL) {
+    if (waveform_path == NULL || options == NULL || launched_out == NULL) {
         return solar_result_error(
             SOLAR_STATUS_INVALID_ARGUMENT,
             "cannot open a missing waveform path",
             "provide a generated VCD or FST artifact"
         );
     }
+    definition = viewer_definition(options->viewer);
     if (definition == NULL) {
         return solar_result_error(
             SOLAR_STATUS_INVALID_ARGUMENT,
@@ -227,7 +249,7 @@ SolarResult solar_waveform_open_with_viewer(
             "select surfer or gtkwave"
         );
     }
-    if (!interactive || disabled_by_environment() ||
+    if (!options->interactive || disabled_by_environment() ||
         !graphical_session_available()) {
         return solar_result_ok();
     }
@@ -240,9 +262,47 @@ SolarResult solar_waveform_open_with_viewer(
             "generate a readable .vcd or .fst waveform first"
         );
     }
-    result = launch_detached(definition, waveform_path);
+    if (options->layout_path != NULL &&
+        (stat(options->layout_path, &information) != 0 ||
+         !S_ISREG(information.st_mode))) {
+        return solar_result_error(
+            SOLAR_STATUS_IO_ERROR,
+            "waveform viewer received an invalid layout",
+            "regenerate the SAPHO simulation layout or open the raw waveform"
+        );
+    }
+    if (options->working_directory != NULL &&
+        (stat(options->working_directory, &information) != 0 ||
+         !S_ISDIR(information.st_mode))) {
+        return solar_result_error(
+            SOLAR_STATUS_IO_ERROR,
+            "waveform viewer received an invalid working directory",
+            "load the waveform from an active Solar project"
+        );
+    }
+    result = launch_detached(
+        definition, waveform_path, options->working_directory,
+        options->layout_path
+    );
     if (result.status == SOLAR_STATUS_OK) *launched_out = true;
     return result;
+}
+
+SolarResult solar_waveform_open_with_viewer(
+    const char *waveform_path,
+    SolarWaveformViewer viewer,
+    bool interactive,
+    bool *launched_out
+)
+{
+    SolarWaveformOpenOptions options;
+
+    solar_waveform_open_options_init(&options);
+    options.viewer = viewer;
+    options.interactive = interactive;
+    return solar_waveform_open_with_options(
+        waveform_path, &options, launched_out
+    );
 }
 
 SolarResult solar_waveform_open(

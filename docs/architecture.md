@@ -59,7 +59,7 @@ so a YANC compiler pipeline runs only once.
 | `config_edit.c` | Rewrite selected format-2 keys through a validated atomic candidate without serializing unrelated TOML. |
 | `project.c` | Discover/load project roots, resolve manifest-relative paths, validate files/directories, and initialize templates. |
 | `discovery.c` | Enumerate conventional Verilog sources, build a conservative module-instantiation graph, and infer synthesis/testbench roots. |
-| `scan.c` | Recalculate and synchronize managed sources/tops through a validated, atomic manifest candidate. |
+| `scan.c`, `cmm_source.c` | Recalculate Verilog inventory or one CMM source/`#PRNAME` identity through a validated, atomic manifest candidate. |
 | `rtl.c` | Build effective RTL configuration and dispatch typed elaboration or compiler generation. |
 | `build.c` | Own one pipeline context, stage results, timing, reuse, and the last-build report. |
 | `test.c` | Select tests/profiles, isolate artifacts, invoke the compiler for generated projects, stage runtime files, and dispatch simulation. |
@@ -70,7 +70,7 @@ so a YANC compiler pipeline runs only once.
 | `filesystem.c` | Create/remove/publish project-local generated trees without following unsafe symlinks. |
 | `runner.c` | Run one executable and argv with optional working directory and separate logs, without a shell. |
 | `progress.c` | Dispatch optional borrowed semantic progress observers without UI state. |
-| `waveform.c` | Apply graphical policy and detach GTKWave or Surfer safely. |
+| `waveform.c` | Apply graphical policy, optional layouts/working directories, and detach GTKWave or Surfer safely. |
 | `diagnostics.c` | Structured status, severity, message, and corrective hint. |
 
 Library functions return results; they do not call `exit()` or print normal UI
@@ -135,6 +135,17 @@ path and reminds the user to rerun `solar scan` after changing `$dumpfile`.
 The result keeps a null waveform path. Format-1 manifests are normalized
 without being rewritten and publish new waveforms through the same public
 layout.
+
+For a generated YANC test, successful waveform publication is followed by an
+optional compiler-backend presentation step. YANC converts the numeric
+`valr2` track into an Assembly-labelled GTKWave layout with
+`trad_opcode.txt`. Layout and translation are atomically stored below
+`.solar/state/waveforms/<test>/`; no extra public build artifact is created.
+Formatter absence or failure becomes a warning and invalidates stale
+presentation state without changing the successful simulation result.
+`solar view` asks the compiler backend for current presentation state, applies
+the returned layout only to GTKWave, and never guesses a YANC path or rebuilds
+the project.
 
 `solar build sim --all` executes declared tests sequentially. It records every
 result, continues after a failed test, then returns failure when at least one

@@ -12,7 +12,7 @@ body:
     attributes:
       label: Solar version
       description: Output of `solar --version`.
-      placeholder: solar 0.4.6
+      placeholder: solar 0.5.0
     validations:
       required: true
   - type: input

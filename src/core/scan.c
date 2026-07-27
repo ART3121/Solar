@@ -1,5 +1,7 @@
 #include "solar/scan.h"
 
+#include "cmm_source_internal.h"
+
 #include "solar/config.h"
 #include "solar/discovery.h"
 #include "solar/filesystem.h"
@@ -36,6 +38,14 @@ static SolarResult scan_error(
 void solar_scan_result_init(SolarScanResult *result)
 {
     if (result != NULL) (void)memset(result, 0, sizeof(*result));
+}
+
+void solar_scan_result_free(SolarScanResult *result)
+{
+    if (result == NULL) return;
+    free(result->compiler_source);
+    free(result->processor);
+    solar_scan_result_init(result);
 }
 
 static bool path_below(const char *path, const char *directory)
@@ -192,6 +202,14 @@ static SolarResult buffer_append(TextBuffer *buffer, const char *text, size_t le
 static SolarResult buffer_text(TextBuffer *buffer, const char *text)
 {
     return buffer_append(buffer, text, strlen(text));
+}
+
+static SolarResult buffer_ensure_newline(TextBuffer *buffer)
+{
+    if (buffer->length == 0U || buffer->data[buffer->length - 1U] == '\n') {
+        return solar_result_ok();
+    }
+    return buffer_text(buffer, "\n");
 }
 
 static SolarResult buffer_quoted(TextBuffer *buffer, const char *value)
@@ -581,6 +599,145 @@ static SolarResult synchronize_v2_text(
     return solar_result_ok();
 }
 
+typedef enum {
+    CMM_SECTION_OTHER = 0,
+    CMM_SECTION_PROJECT,
+    CMM_SECTION_COMPILER,
+    CMM_SECTION_SYNTHESIS
+} CmmManifestSection;
+
+typedef struct {
+    bool project_name;
+    bool compiler_source;
+    bool compiler_processor;
+    bool synthesis_top;
+} CmmWrittenFields;
+
+static SolarResult finish_cmm_section(
+    TextBuffer *output,
+    CmmManifestSection section,
+    const char *source,
+    const char *processor,
+    CmmWrittenFields *written
+)
+{
+    SolarResult result = solar_result_ok();
+
+    if (section == CMM_SECTION_PROJECT && !written->project_name) {
+        result = buffer_ensure_newline(output);
+        if (result.status == SOLAR_STATUS_OK) {
+            result = append_key_string(output, "name", processor);
+            written->project_name = result.status == SOLAR_STATUS_OK;
+        }
+    } else if (section == CMM_SECTION_COMPILER) {
+        if (!written->compiler_source) {
+            result = buffer_ensure_newline(output);
+            if (result.status == SOLAR_STATUS_OK) {
+                result = append_key_string(output, "source", source);
+                written->compiler_source = result.status == SOLAR_STATUS_OK;
+            }
+        }
+        if (result.status == SOLAR_STATUS_OK && !written->compiler_processor) {
+            result = buffer_ensure_newline(output);
+            if (result.status == SOLAR_STATUS_OK) {
+                result = append_key_string(output, "processor", processor);
+                written->compiler_processor = result.status == SOLAR_STATUS_OK;
+            }
+        }
+    } else if (section == CMM_SECTION_SYNTHESIS && !written->synthesis_top) {
+        result = buffer_ensure_newline(output);
+        if (result.status == SOLAR_STATUS_OK) {
+            result = append_key_string(output, "top", processor);
+            written->synthesis_top = result.status == SOLAR_STATUS_OK;
+        }
+    }
+    return result;
+}
+
+static CmmManifestSection cmm_section_for_header(
+    const char *line,
+    const char *end
+)
+{
+    if (line_equals(line, end, "[project]")) return CMM_SECTION_PROJECT;
+    if (line_equals(line, end, "[compiler]")) return CMM_SECTION_COMPILER;
+    if (line_equals(line, end, "[synthesis]")) return CMM_SECTION_SYNTHESIS;
+    return CMM_SECTION_OTHER;
+}
+
+static SolarResult synchronize_cmm_v2_text(
+    const char *input,
+    size_t input_length,
+    const char *source,
+    const char *processor,
+    char **text_out,
+    size_t *length_out
+)
+{
+    TextBuffer output = {0};
+    CmmManifestSection section = CMM_SECTION_OTHER;
+    CmmWrittenFields written = {0};
+    const char *cursor = input;
+    const char *limit = input + input_length;
+    SolarResult result = solar_result_ok();
+
+    *text_out = NULL;
+    *length_out = 0U;
+    while (cursor < limit && result.status == SOLAR_STATUS_OK) {
+        const char *end = memchr(cursor, '\n', (size_t)(limit - cursor));
+
+        end = end == NULL ? limit : end + 1;
+        if (line_is_header(cursor, end)) {
+            result = finish_cmm_section(
+                &output, section, source, processor, &written
+            );
+            if (result.status != SOLAR_STATUS_OK) break;
+            section = cmm_section_for_header(cursor, end);
+        }
+        if (section == CMM_SECTION_PROJECT &&
+            line_is_key(cursor, end, "name")) {
+            result = append_key_string(&output, "name", processor);
+            written.project_name = result.status == SOLAR_STATUS_OK;
+        } else if (section == CMM_SECTION_COMPILER &&
+                   line_is_key(cursor, end, "source")) {
+            result = append_key_string(&output, "source", source);
+            written.compiler_source = result.status == SOLAR_STATUS_OK;
+        } else if (section == CMM_SECTION_COMPILER &&
+                   line_is_key(cursor, end, "processor")) {
+            result = append_key_string(&output, "processor", processor);
+            written.compiler_processor = result.status == SOLAR_STATUS_OK;
+        } else if (section == CMM_SECTION_SYNTHESIS &&
+                   line_is_key(cursor, end, "top")) {
+            result = append_key_string(&output, "top", processor);
+            written.synthesis_top = result.status == SOLAR_STATUS_OK;
+        } else {
+            result = buffer_append(&output, cursor, (size_t)(end - cursor));
+        }
+        cursor = end;
+    }
+    if (result.status == SOLAR_STATUS_OK) {
+        result = finish_cmm_section(
+            &output, section, source, processor, &written
+        );
+    }
+    if (result.status == SOLAR_STATUS_OK &&
+        (!written.project_name || !written.compiler_source ||
+         !written.compiler_processor || !written.synthesis_top)) {
+        result = scan_error(
+            SOLAR_STATUS_CONFIG_ERROR,
+            "solar.toml is missing a section required for CMM synchronization",
+            "define [project], [compiler], and [synthesis], then run solar scan again"
+        );
+    }
+    if (result.status != SOLAR_STATUS_OK) {
+        free(output.data);
+        return result;
+    }
+    *text_out = output.data;
+    *length_out = output.length;
+    return solar_result_ok();
+}
+
 static SolarResult append_v1_project(
     TextBuffer *output,
     const SolarConfig *original,
@@ -848,11 +1005,15 @@ SolarResult solar_scan_project(const char *start_path, SolarScanResult *scan)
     char *candidate_path = NULL;
     char *input = NULL;
     char *candidate = NULL;
+    char *cmm_source = NULL;
+    char *cmm_source_path = NULL;
+    char *cmm_processor = NULL;
     size_t input_length = 0U;
     size_t candidate_length = 0U;
     struct stat information;
     SolarProjectLock project_lock;
     SolarResult result;
+    bool cmm_scan = false;
 
     if (start_path == NULL || scan == NULL) {
         return scan_error(
@@ -874,23 +1035,52 @@ SolarResult solar_scan_project(const char *start_path, SolarScanResult *scan)
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
     result = solar_config_parse_file(manifest, &original);
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    cmm_scan = original.project.language != NULL &&
+        strcmp(original.project.language, "cmm") == 0;
     if (original.project.language == NULL ||
-        strcmp(original.project.language, "verilog") != 0) {
+        (strcmp(original.project.language, "verilog") != 0 && !cmm_scan)) {
         result = scan_error(
             SOLAR_STATUS_CONFIG_ERROR,
-            "solar scan applies only to conventional Verilog projects",
-            "YANC projects use the single source configured under [compiler]"
+            "solar scan supports conventional Verilog and CMM projects",
+            "configure C++ and Assembly sources explicitly under [compiler]"
         );
         goto cleanup;
     }
-    result = build_inventory(root, &original, &inventory);
-    if (result.status != SOLAR_STATUS_OK) goto cleanup;
-    result = preserve_identifiable_test_names(&original, &inventory.config);
-    if (result.status != SOLAR_STATUS_OK) goto cleanup;
-    count_changes(&original, &inventory.config, scan);
+    scan->kind = cmm_scan ? SOLAR_SCAN_CMM : SOLAR_SCAN_VERILOG;
+    if (cmm_scan) {
+        if (original.manifest_format != 2U) {
+            result = scan_error(
+                SOLAR_STATUS_CONFIG_ERROR,
+                "CMM scan requires Solar project format 2",
+                "add [solar] format = 2 before synchronizing the CMM project"
+            );
+            goto cleanup;
+        }
+        result = solar_cmm_discover_source(
+            root, original.compiler.source, &cmm_source
+        );
+        if (result.status != SOLAR_STATUS_OK) goto cleanup;
+        result = solar_filesystem_join(root, cmm_source, &cmm_source_path);
+        if (result.status != SOLAR_STATUS_OK) goto cleanup;
+        result = solar_cmm_read_processor_name(
+            cmm_source_path, &cmm_processor
+        );
+        if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    } else {
+        result = build_inventory(root, &original, &inventory);
+        if (result.status != SOLAR_STATUS_OK) goto cleanup;
+        result = preserve_identifiable_test_names(&original, &inventory.config);
+        if (result.status != SOLAR_STATUS_OK) goto cleanup;
+        count_changes(&original, &inventory.config, scan);
+    }
     result = read_file(manifest, &input, &input_length);
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
-    if (original.manifest_format == 1U) {
+    if (cmm_scan) {
+        result = synchronize_cmm_v2_text(
+            input, input_length, cmm_source, cmm_processor,
+            &candidate, &candidate_length
+        );
+    } else if (original.manifest_format == 1U) {
         result = migrate_v1_text(
             &original, &inventory.config, &candidate, &candidate_length
         );
@@ -954,7 +1144,16 @@ SolarResult solar_scan_project(const char *start_path, SolarScanResult *scan)
     result = solar_result_ok();
 
 cleanup:
+    if (result.status == SOLAR_STATUS_OK && cmm_scan) {
+        scan->compiler_source = cmm_source;
+        scan->processor = cmm_processor;
+        cmm_source = NULL;
+        cmm_processor = NULL;
+    }
     solar_project_lock_release(&project_lock);
+    free(cmm_processor);
+    free(cmm_source_path);
+    free(cmm_source);
     free(candidate);
     free(input);
     free(candidate_path);
