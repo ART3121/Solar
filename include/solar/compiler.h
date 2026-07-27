@@ -15,6 +15,7 @@ typedef struct {
     char *instruction_image_path;
     char *data_image_path;
     char *testbench_path;
+    char *instruction_translation_path;
     char *processor_top;
     char *testbench_top;
     SolarStringList rtl_sources;
@@ -58,6 +59,30 @@ SolarResult solar_compiler_compile_with_progress(
     const SolarProject *project,
     const SolarProgressObserver *progress_observer,
     SolarCompilerResult *compiler_result
+);
+
+/*
+ * Prepares an optional viewer layout for one generated waveform. The selected
+ * compiler backend owns the tool-specific work. layout_path_out is owned by
+ * the caller on success.
+ */
+SolarResult solar_compiler_prepare_waveform_layout(
+    const SolarProject *project,
+    const SolarGeneratedArtifacts *artifacts,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
+);
+
+/*
+ * Finds a previously prepared layout without invoking external tools. Backends
+ * with no presentation support return success with a NULL output.
+ */
+SolarResult solar_compiler_find_waveform_layout(
+    const SolarProject *project,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
 );
 
 #endif

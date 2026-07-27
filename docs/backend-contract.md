@@ -21,7 +21,11 @@ Simulation and synthesis use an internal `SolarBackend` descriptor containing:
 
 Source-to-hardware compilers use the separate compiler-backend descriptor and
 Compiler Service documented in [Compiler backends](compiler-backends.md). YANC
-is not a simulation backend.
+is not a simulation backend. A compiler backend may also expose an optional
+waveform-presentation callback and a read-only lookup callback. The first
+prepares viewer metadata after simulation; the second lets a frontend find
+current metadata without guessing backend paths, turning the compiler into a
+simulator, or launching a GUI.
 
 Current registrations are:
 
@@ -35,7 +39,9 @@ Current registrations are:
 GTKWave and Surfer are optional waveform consumers, not simulation backends.
 The Core viewer service launches the selected client only through `solar view`
 and never changes a build result. GTKWave remains the default; Surfer is
-selected with `--viewer surfer`.
+selected with `--viewer surfer`. Viewer options may carry a validated working
+directory and optional layout. Only GTKWave consumes the current `.gtkw`
+layout; other viewers receive the waveform alone.
 
 ## Typed requests
 

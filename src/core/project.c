@@ -1,5 +1,7 @@
 #include "solar/project.h"
 
+#include "cmm_source_internal.h"
+
 #include "solar/filesystem.h"
 
 #include <errno.h>
@@ -787,6 +789,40 @@ static SolarResult validate_compiler_extension(const SolarProject *project)
     return solar_result_ok();
 }
 
+static SolarResult validate_cmm_processor_identity(const SolarProject *project)
+{
+    char *source_path = NULL;
+    char *declared_processor = NULL;
+    SolarResult result;
+
+    if (project->config.project.language == NULL ||
+        strcmp(project->config.project.language, "cmm") != 0) {
+        return solar_result_ok();
+    }
+    result = solar_project_resolve_path(
+        project, project->config.compiler.source, &source_path
+    );
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    result = solar_cmm_read_processor_name(source_path, &declared_processor);
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    if (strcmp(declared_processor, project->config.compiler.processor) != 0) {
+        result = project_error(
+            SOLAR_STATUS_CONFIG_ERROR,
+            "run solar scan to synchronize the CMM processor identity",
+            "%s: [compiler].processor '%s' does not match #PRNAME '%s' in %s",
+            project->manifest_path,
+            project->config.compiler.processor,
+            declared_processor,
+            project->config.compiler.source
+        );
+    }
+
+cleanup:
+    free(declared_processor);
+    free(source_path);
+    return result;
+}
+
 static SolarResult validate_profile_and_test_paths(const SolarProject *project)
 {
     size_t index;
@@ -870,6 +906,8 @@ SolarResult solar_project_validate(const SolarProject *project)
     );
     if (result.status != SOLAR_STATUS_OK) return result;
     result = validate_compiler_extension(project);
+    if (result.status != SOLAR_STATUS_OK) return result;
+    result = validate_cmm_processor_identity(project);
     if (result.status != SOLAR_STATUS_OK) return result;
     return validate_profile_and_test_paths(project);
 }

@@ -24,6 +24,6 @@
 #include "solar/yanc.h"
 #include "solar/waveform.h"
 
-#define SOLAR_VERSION "0.4.6"
+#define SOLAR_VERSION "0.5.0"
 
 #endif

@@ -52,6 +52,8 @@ SolarResult solar_cli_command_scan(const char *start_path);
 
 SolarResult solar_cli_open_waveform_path(
     const char *waveform_path,
+    const char *layout_path,
+    const char *working_directory,
     SolarWaveformViewer viewer
 );
 

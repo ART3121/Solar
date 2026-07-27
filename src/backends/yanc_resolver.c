@@ -58,6 +58,7 @@ void solar_yanc_toolchain_free(SolarYancToolchain *toolchain)
     free(toolchain->cppcomp);
     free(toolchain->appcomp);
     free(toolchain->asmcomp);
+    free(toolchain->gen_gtkw);
     free(toolchain->version);
     solar_yanc_toolchain_init(toolchain);
 }
@@ -454,7 +455,9 @@ static SolarResult resolve_tools(SolarYancToolchain *toolchain)
     if (result.status != SOLAR_STATUS_OK) return result;
     result = resolve_tool(toolchain, "appcomp", &toolchain->appcomp);
     if (result.status != SOLAR_STATUS_OK) return result;
-    return resolve_tool(toolchain, "asmcomp", &toolchain->asmcomp);
+    result = resolve_tool(toolchain, "asmcomp", &toolchain->asmcomp);
+    if (result.status != SOLAR_STATUS_OK) return result;
+    return resolve_tool(toolchain, "gen_gtkw", &toolchain->gen_gtkw);
 }
 
 static char *first_output_line(const SolarProcessResult *process)

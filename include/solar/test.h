@@ -26,6 +26,8 @@ typedef struct {
     char *profile_name;
     char *executable_path;
     char *waveform_path;
+    char *waveform_layout_path;
+    SolarDiagnostic waveform_layout_diagnostic;
     /* Owned VVP stdout; preserved independently in the per-test run log. */
     char *output;
     uint64_t compile_duration_ns;

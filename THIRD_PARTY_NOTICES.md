@@ -13,8 +13,9 @@ Solar vendors the YANC compiler toolchain sources from
 The unmodified upstream license is installed beside this notice. Solar builds
 the five required command-line compilers (`cmmcomp`, `cpppp`, `cppcomp`,
 `appcomp`, and `asmcomp`) from a staged copy and invokes them through the same
-shell-free process runner used for other EDA tools. Optional upstream helpers
-such as `gen_gtkw` and `comp2gtkw` are not built or installed by Solar.
+shell-free process runner used for other EDA tools. Solar also builds and
+installs `gen_gtkw` for Assembly-only GTKWave presentation. The optional
+complex-value helper `comp2gtkw` is not built or installed.
 
 The vendored snapshot carries local integration, compatibility, and hardening
 patches. They include:
@@ -23,6 +24,8 @@ patches. They include:
 - portable named CLI arguments, bilingual diagnostics, and deterministic
   creation/validation of generated output directories;
 - Verilator-compatible generated HDL and trace guards;
+- an opt-in `gen_gtkw --assembly-only` mode used by Solar without changing the
+  helper's existing full-layout interface;
 - compatibility sidecars derived from validated `appcomp` output for direct
   Assembly input;
 - bounded complex-literal parsing, checked compiler streams, deterministic

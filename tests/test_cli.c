@@ -413,6 +413,7 @@ static int test_yanc_template_cli(const char *solar_path)
         solar_path, "init", "--template", "yanc-cmm", NULL
     };
     const char *check_arguments[] = {solar_path, "check", NULL};
+    const char *scan_arguments[] = {solar_path, "scan", NULL};
     int failures = 0;
 
     if (directory == NULL) {
@@ -476,6 +477,33 @@ static int test_yanc_template_cli(const char *solar_path)
         solar_path, directory, legacy_arguments, 2, NULL,
         "use solar init [--template verilog|sapho]"
     );
+    if (write_text_file(
+            source,
+            "#PRNAME renamed_cpu\n"
+            "#NUBITS 16\n#NDSTAC 4\n#SDEPTH 4\n"
+            "#NUIOIN 1\n#NUIOOU 1\n#NBMANT 10\n#NBEXPO 5\n"
+            "void main() {}\n"
+        ) != 0) {
+        failures += report_failure(test_name, "could not edit the CMM identity");
+        goto cleanup;
+    }
+    failures += run_arguments_and_expect(
+        "CLI CMM scan",
+        solar_path,
+        directory,
+        scan_arguments,
+        0,
+        "Processor:     renamed_cpu",
+        NULL
+    );
+    if (!file_contains(manifest, "name = \"renamed_cpu\"") ||
+        !file_contains(manifest, "source = \"software/processor.cmm\"") ||
+        !file_contains(manifest, "processor = \"renamed_cpu\"") ||
+        !file_contains(manifest, "top = \"renamed_cpu\"")) {
+        failures += report_failure(
+            test_name, "CMM scan did not synchronize managed manifest fields"
+        );
+    }
 
 cleanup:
     if (source != NULL) (void)unlink(source);

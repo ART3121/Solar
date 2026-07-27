@@ -24,6 +24,8 @@ typedef struct {
     char *cppcomp;
     char *appcomp;
     char *asmcomp;
+    /* Optional presentation helper; compilation remains valid without it. */
+    char *gen_gtkw;
     char *version;
     bool bundled;
 } SolarYancToolchain;

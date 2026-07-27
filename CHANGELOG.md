@@ -3,6 +3,31 @@
 All notable changes to Solar are recorded here. No tag or release is implied by
 this development changelog.
 
+## [0.5.0]
+
+### Added
+
+- Transactional CMM support in `solar scan`: one source is discovered safely,
+  its active `#PRNAME` becomes the project/compiler/synthesis identity, and the
+  discovered relative source path is persisted without running YANC.
+- SAPHO simulations prepare an Assembly-decoded GTKWave layout from validated
+  YANC output while preserving the raw waveform for other viewers.
+
+### Changed
+
+- `solar check` now reports a CMM `#PRNAME` and `[compiler].processor`
+  mismatch with a direct hint to run `solar scan`.
+- `solar view` applies the generated SAPHO instruction layout when GTKWave is
+  selected; simulation still never launches a GUI automatically.
+- The product version is `0.5.0`; project manifest format remains `2`.
+
+### Compatibility
+
+- Verilog scan behavior is unchanged. C++ and direct Assembly source selection
+  remain explicit in this development slice.
+- Existing format-1/format-2 manifests and public artifact paths remain
+  compatible.
+
 ## [0.4.6]
 
 ### Added

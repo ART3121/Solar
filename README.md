@@ -6,7 +6,7 @@
   <img alt="C17" src="https://img.shields.io/badge/C-17-00599C?style=flat-square&amp;logo=c&amp;logoColor=white" />
   <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=111111" />
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square" /></a>
-  <a href="https://github.com/ART3121/solar/releases/tag/v0.4.6"><img alt="Version: 0.4.6" src="https://img.shields.io/badge/version-0.4.6-EF6C00?style=flat-square" /></a>
+  <a href="https://github.com/ART3121/solar/releases/tag/v0.5.0"><img alt="Version: 0.5.0" src="https://img.shields.io/badge/version-0.5.0-EF6C00?style=flat-square" /></a>
 </p>
 
 # Solar
@@ -22,7 +22,7 @@ future frontends.
 
 ## Status
 
-Solar 0.4.6 supports Linux x86_64 and project manifest format 2, with
+Solar 0.5.0 supports Linux x86_64 and project manifest format 2, with
 non-mutating compatibility for format 1.
 
 ```text
@@ -34,7 +34,9 @@ Artifacts:  view  report
 Supported flows include Verilog/SystemVerilog with Icarus Verilog, Verilator,
 and Yosys; optional cocotb 2.x tests; and bundled YANC 5.2 compilation for CMM,
 C++, and Assembly SAPHO projects. GTKWave and Surfer are optional external
-viewers used only by `solar view`.
+viewers used only by `solar view`. Generated SAPHO simulations prepare an
+Assembly-decoded GTKWave layout automatically; Surfer continues to open the
+raw waveform.
 
 Solar is intended for trusted local project inputs. The bundled legacy YANC
 compiler has received targeted hardening but is not presented as a sandbox for
@@ -111,6 +113,12 @@ solar report compare --against build-<TAB>
 below `rtl/` and `tb/` are discovered automatically. Run `solar scan` when you
 want the discovered sources, tops, tests, and literal `$dumpfile(...)` paths
 synchronized into `solar.toml`.
+
+For a format-2 CMM/SAPHO project, `solar scan` finds exactly one regular
+`.cmm` source below `software/`, reads its active `#PRNAME`, and synchronizes
+the project name, compiler source/processor, and synthesis top. This is useful
+after renaming the source or changing `#PRNAME`. Ambiguous projects are left
+unchanged; C++ and direct Assembly sources remain explicitly configured.
 
 After changing the name or path passed to `$dumpfile`, run `solar scan` again
 before building. `solar config set --test <name>` selects an already discovered

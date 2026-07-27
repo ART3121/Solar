@@ -40,7 +40,7 @@ tar -czf "$release/solar-linux-x86_64.tar.gz" \
 )
 
 SOLAR_INSTALL_BASE_URL="file://$release" \
-    sh "$installer" --version v0.4.6 --prefix "$prefix"
+    sh "$installer" --version v0.5.0 --prefix "$prefix"
 
 [ -x "$prefix/bin/solar" ]
 [ -f "$prefix/share/bash-completion/completions/solar" ]
@@ -61,7 +61,7 @@ tar -czf "$bad_release/solar-linux-x86_64.tar.gz" \
     sha256sum solar-linux-x86_64.tar.gz > SHA256SUMS
 )
 if SOLAR_INSTALL_BASE_URL="file://$bad_release" \
-    sh "$installer" --version v0.4.6 --prefix "$prefix" >/dev/null 2>&1; then
+    sh "$installer" --version v0.5.0 --prefix "$prefix" >/dev/null 2>&1; then
     printf 'installer accepted a traversal path\n' >&2
     exit 1
 fi

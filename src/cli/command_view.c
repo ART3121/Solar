@@ -1,6 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "commands.h"
 
 #include "solar/artifact.h"
+#include "solar/compiler.h"
 #include "solar/project.h"
 #include "solar/waveform.h"
 
@@ -10,12 +13,21 @@
 
 SolarResult solar_cli_open_waveform_path(
     const char *waveform_path,
+    const char *layout_path,
+    const char *working_directory,
     SolarWaveformViewer viewer
 )
 {
+    SolarWaveformOpenOptions options;
     bool launched = false;
-    SolarResult result = solar_waveform_open_with_viewer(
-        waveform_path, viewer, true, &launched
+
+    solar_waveform_open_options_init(&options);
+    options.viewer = viewer;
+    options.layout_path = layout_path;
+    options.working_directory = working_directory;
+    options.interactive = true;
+    SolarResult result = solar_waveform_open_with_options(
+        waveform_path, &options, &launched
     );
 
     if (result.status != SOLAR_STATUS_OK) return result;
@@ -31,6 +43,9 @@ SolarResult solar_cli_open_waveform_path(
         solar_waveform_viewer_name(viewer),
         waveform_path
     );
+    if (layout_path != NULL) {
+        (void)printf("GTKWave layout: %s\n", layout_path);
+    }
     return solar_result_ok();
 }
 
@@ -110,7 +125,8 @@ static SolarResult parse_arguments(
 static SolarResult selected_test_waveform(
     const SolarProject *project,
     const char *test_name,
-    char **path_out
+    char **path_out,
+    char **selected_test_out
 )
 {
     const SolarTest *test = NULL;
@@ -120,6 +136,7 @@ static SolarResult selected_test_waveform(
         &project->config, test_name, &test
     );
 
+    *selected_test_out = NULL;
     if (result.status != SOLAR_STATUS_OK) return result;
     solar_artifact_list_init(&artifacts);
     result = solar_artifact_list_load(project->root, &artifacts);
@@ -134,6 +151,18 @@ static SolarResult selected_test_waveform(
         goto cleanup;
     }
     result = solar_project_resolve_path(project, record->path, path_out);
+    if (result.status == SOLAR_STATUS_OK) {
+        *selected_test_out = strdup(test->name);
+        if (*selected_test_out == NULL) {
+            free(*path_out);
+            *path_out = NULL;
+            result = solar_result_error(
+                SOLAR_STATUS_INTERNAL_ERROR,
+                "could not retain the selected waveform test",
+                "free memory and try again"
+            );
+        }
+    }
 
 cleanup:
     solar_artifact_list_free(&artifacts);
@@ -143,7 +172,8 @@ cleanup:
 static SolarResult explicit_waveform(
     const SolarProject *project,
     const char *argument,
-    char **path_out
+    char **path_out,
+    char **selected_test_out
 )
 {
     SolarArtifactList artifacts;
@@ -152,6 +182,7 @@ static SolarResult explicit_waveform(
     size_t index;
     SolarResult result;
 
+    *selected_test_out = NULL;
     if (argument[0] == '/') {
         if (strncmp(argument, project->root, root_length) != 0 ||
             argument[root_length] != '/') {
@@ -170,6 +201,18 @@ static SolarResult explicit_waveform(
         if (strcmp(artifacts.items[index].type, "waveform") == 0 &&
             strcmp(artifacts.items[index].path, relative) == 0) {
             result = solar_project_resolve_path(project, relative, path_out);
+            if (result.status == SOLAR_STATUS_OK) {
+                *selected_test_out = strdup(artifacts.items[index].test_name);
+                if (*selected_test_out == NULL) {
+                    free(*path_out);
+                    *path_out = NULL;
+                    result = solar_result_error(
+                        SOLAR_STATUS_INTERNAL_ERROR,
+                        "could not retain the selected waveform test",
+                        "free memory and try again"
+                    );
+                }
+            }
             goto cleanup;
         }
     }
@@ -184,6 +227,16 @@ cleanup:
     return result;
 }
 
+static bool is_generated_test(const SolarProject *project, const char *test_name)
+{
+    const SolarTest *test;
+
+    if (test_name == NULL) return false;
+    test = solar_config_find_test(&project->config, test_name);
+
+    return test != NULL && test->kind == SOLAR_TEST_GENERATED;
+}
+
 SolarResult solar_cli_command_view(
     const char *start_path,
     int argument_count,
@@ -195,6 +248,8 @@ SolarResult solar_cli_command_view(
     SolarWaveformViewer viewer = SOLAR_WAVEFORM_VIEWER_GTKWAVE;
     SolarProject project;
     char *waveform_path = NULL;
+    char *layout_path = NULL;
+    char *selected_test = NULL;
     SolarResult result;
 
     result = parse_arguments(
@@ -214,14 +269,38 @@ SolarResult solar_cli_command_view(
     }
     if (result.status == SOLAR_STATUS_OK && waveform_argument != NULL) {
         result = explicit_waveform(
-            &project, waveform_argument, &waveform_path
+            &project, waveform_argument, &waveform_path, &selected_test
         );
     } else if (result.status == SOLAR_STATUS_OK) {
-        result = selected_test_waveform(&project, test_name, &waveform_path);
+        result = selected_test_waveform(
+            &project, test_name, &waveform_path, &selected_test
+        );
+    }
+    if (result.status == SOLAR_STATUS_OK &&
+        viewer == SOLAR_WAVEFORM_VIEWER_GTKWAVE &&
+        is_generated_test(&project, selected_test)) {
+        result = solar_compiler_find_waveform_layout(
+            &project, selected_test, waveform_path, &layout_path
+        );
+        if (result.status == SOLAR_STATUS_OK && layout_path == NULL) {
+            (void)fprintf(
+                stderr,
+                "solar: warning: decoded SAPHO Assembly layout is unavailable; "
+                "opening the raw waveform\n"
+                "hint: run solar build sim with Solar's bundled YANC or an "
+                "external root containing compatible gen_gtkw\n"
+            );
+        }
     }
     if (result.status == SOLAR_STATUS_OK) {
-        result = solar_cli_open_waveform_path(waveform_path, viewer);
+        result = solar_cli_open_waveform_path(
+            waveform_path, layout_path,
+            layout_path == NULL ? NULL : project.root,
+            viewer
+        );
     }
+    free(selected_test);
+    free(layout_path);
     free(waveform_path);
     solar_project_free(&project);
     return result;

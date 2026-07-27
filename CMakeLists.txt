@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(Solar VERSION 0.4.6 LANGUAGES C)
+project(Solar VERSION 0.5.0 LANGUAGES C)
 
 include(CTest)
 include(GNUInstallDirs)
@@ -28,6 +28,7 @@ set(SOLAR_YANC_BINARIES
     "${SOLAR_YANC_BIN_DIR}/asmcomp"
     "${SOLAR_YANC_BIN_DIR}/cpppp"
     "${SOLAR_YANC_BIN_DIR}/cppcomp"
+    "${SOLAR_YANC_BIN_DIR}/gen_gtkw"
 )
 set(SOLAR_COCOTB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/cocotb")
 set(SOLAR_COCOTB_BUILD_SCRIPT
@@ -47,6 +48,7 @@ find_program(SOLAR_BISON_EXECUTABLE NAMES bison REQUIRED)
 file(GLOB_RECURSE SOLAR_YANC_SOURCES CONFIGURE_DEPENDS
     "${SOLAR_YANC_SOURCE_DIR}/Compilers/*"
     "${SOLAR_YANC_SOURCE_DIR}/HDL/*"
+    "${SOLAR_YANC_SOURCE_DIR}/Scripts/gen_gtkw.c"
     "${SOLAR_YANC_SOURCE_DIR}/Makefile"
 )
 
@@ -64,7 +66,7 @@ add_custom_command(
         "BISON=${SOLAR_BISON_EXECUTABLE}"
         "BIN=${SOLAR_YANC_BIN_DIR}"
         ${SOLAR_YANC_MAKE_OPTIONS}
-        cmmcomp appcomp asmcomp cpppp cppcomp
+        cmmcomp appcomp asmcomp cpppp cppcomp gen_gtkw
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
         "${SOLAR_YANC_STAGE_DIR}/HDL" "${SOLAR_YANC_BUNDLE_DIR}/HDL"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
@@ -111,6 +113,7 @@ add_library(solar_core STATIC
     src/core/config.c
     src/core/config_edit.c
     src/core/config_model.c
+    src/core/cmm_source.c
     src/core/discovery.c
     src/core/project.c
     src/core/progress.c
@@ -484,6 +487,7 @@ if(BUILD_TESTING)
             COMMAND test_yanc_integration
                 $<TARGET_FILE:solar>
                 yanc-${yanc_language}
+                $<TARGET_FILE:viewer_helper>
         )
         set_tests_properties(
             integration_yanc_${yanc_language}

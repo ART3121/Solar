@@ -83,6 +83,7 @@ single-processor flow are:
 - generated testbench RTL;
 - instruction-memory image;
 - data-memory image;
+- optional Assembly opcode translation table for waveform presentation;
 - processor top;
 - testbench top;
 - runtime working directory;
@@ -120,6 +121,17 @@ A compiler backend follows this bounded lifecycle:
 8. **Publish**: replace the previous build only after every preceding step
    succeeds.
 9. **Return**: provide structured artifacts and stage diagnostics to Core.
+
+After a generated simulation publishes its waveform, Core may call the
+backend's optional presentation operation. This is a separate, non-critical
+step: YANC copies the validated opcode table, invokes `gen_gtkw` through the
+shared runner, and atomically replaces
+`.solar/state/waveforms/<test>/`. Failure leaves the raw waveform valid and is
+returned as a structured warning to the frontend.
+
+A separate read-only backend operation validates and returns the current
+layout for `solar view`. The CLI therefore neither reconstructs a YANC path nor
+executes presentation tooling while opening an existing waveform.
 
 The backend stops at the first failed compiler stage. Logs from completed and
 failed stages remain available; later executables are not invoked.
@@ -286,5 +298,5 @@ include directory. Assembly passed using a staging-only bridge derived from
   compiler stages. Terminal interruption is forwarded to the tool group.
 - No arbitrary compiler flags or dynamic compiler plugins.
 - No multiprocessor YANC flow.
-- No runtime installation, download, setup script, or automatic
-  waveform-formatting helper execution.
+- No runtime installation, download, setup script, or source-line/variable
+  waveform formatting beyond the Assembly-only layout.

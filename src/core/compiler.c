@@ -23,6 +23,7 @@ void solar_generated_artifacts_free(SolarGeneratedArtifacts *artifacts)
     free(artifacts->instruction_image_path);
     free(artifacts->data_image_path);
     free(artifacts->testbench_path);
+    free(artifacts->instruction_translation_path);
     free(artifacts->processor_top);
     free(artifacts->testbench_top);
     solar_string_list_free(&artifacts->rtl_sources);
@@ -178,4 +179,63 @@ SolarResult solar_compiler_compile_with_progress(
         );
     }
     return backend->compile(project, compiler_result);
+}
+
+SolarResult solar_compiler_prepare_waveform_layout(
+    const SolarProject *project,
+    const SolarGeneratedArtifacts *artifacts,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
+)
+{
+    const SolarCompilerBackend *backend;
+
+    if (layout_path_out != NULL) *layout_path_out = NULL;
+    if (project == NULL || artifacts == NULL || test_name == NULL ||
+        waveform_path == NULL || layout_path_out == NULL) {
+        return solar_result_error(
+            SOLAR_STATUS_INVALID_ARGUMENT,
+            "cannot prepare a waveform layout without generated artifacts",
+            "provide a generated test name, waveform, and result storage"
+        );
+    }
+    backend = find_compiler_backend(project->config.compiler.backend);
+    if (backend == NULL || backend->prepare_waveform_layout == NULL) {
+        return solar_result_error(
+            SOLAR_STATUS_NOT_FOUND,
+            "the compiler backend provides no waveform presentation",
+            "open the generated waveform without a backend-specific layout"
+        );
+    }
+    return backend->prepare_waveform_layout(
+        project, artifacts, test_name, waveform_path, layout_path_out
+    );
+}
+
+SolarResult solar_compiler_find_waveform_layout(
+    const SolarProject *project,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
+)
+{
+    const SolarCompilerBackend *backend;
+
+    if (layout_path_out != NULL) *layout_path_out = NULL;
+    if (project == NULL || test_name == NULL || waveform_path == NULL ||
+        layout_path_out == NULL) {
+        return solar_result_error(
+            SOLAR_STATUS_INVALID_ARGUMENT,
+            "cannot find a waveform layout without a generated test",
+            "provide a generated test name, waveform, and result storage"
+        );
+    }
+    backend = find_compiler_backend(project->config.compiler.backend);
+    if (backend == NULL || backend->find_waveform_layout == NULL) {
+        return solar_result_ok();
+    }
+    return backend->find_waveform_layout(
+        project, test_name, waveform_path, layout_path_out
+    );
 }

@@ -233,6 +233,23 @@ static void print_waveform_warning(
     );
 }
 
+static void print_waveform_layout_warning(const SolarTestResult *simulation)
+{
+    const SolarDiagnostic *diagnostic =
+        &simulation->waveform_layout_diagnostic;
+
+    if (diagnostic->severity != SOLAR_DIAGNOSTIC_WARNING) return;
+    (void)fprintf(
+        stderr, "solar: warning: %s\n",
+        diagnostic->message[0] == '\0'
+            ? "the SAPHO waveform layout was not generated"
+            : diagnostic->message
+    );
+    if (diagnostic->hint[0] != '\0') {
+        (void)fprintf(stderr, "hint: %s\n", diagnostic->hint);
+    }
+}
+
 static uint64_t compiler_duration(const SolarCompilerResult *compiler)
 {
     uint64_t duration = 0U;
@@ -343,9 +360,16 @@ static void print_context(
         if (context->test_result.waveform_path != NULL) {
             (void)printf("Waveform: %s\n", context->test_result.waveform_path);
         }
+        if (context->test_result.waveform_layout_path != NULL) {
+            (void)printf(
+                "GTKWave layout: %s\n",
+                context->test_result.waveform_layout_path
+            );
+        }
         print_waveform_warning(
             &context->project.config, &context->test_result
         );
+        print_waveform_layout_warning(&context->test_result);
     }
     if (context->has_test_summary) {
         for (index = 0U; index < context->test_summary.count; index++) {
@@ -362,6 +386,7 @@ static void print_context(
             }
             (void)printf("\n");
             print_waveform_warning(&context->project.config, simulation);
+            print_waveform_layout_warning(simulation);
         }
         (void)printf("%zu passed, %zu failed\n",
             context->test_summary.passed, context->test_summary.failed);

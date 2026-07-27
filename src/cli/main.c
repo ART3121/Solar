@@ -45,7 +45,8 @@ static bool print_command_help(const char *command, FILE *stream)
             "Usage: solar init [--template verilog|sapho]\n");
     } else if (strcmp(command, "scan") == 0) {
         (void)fprintf(stream,
-            "Usage: solar scan\nDetect .v/.sv hierarchy and synchronize sources and tops.\n");
+            "Usage: solar scan\n"
+            "Synchronize conventional Verilog hierarchy or one CMM processor.\n");
     } else if (strcmp(command, "check") == 0) {
         (void)fprintf(stream,
             "Usage: solar check\nValidate the manifest and discovered project sources.\n");

@@ -5,6 +5,7 @@
 #include "solar/artifact.h"
 #include "solar/compiler.h"
 #include "solar/project.h"
+#include "solar/test.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -275,7 +276,8 @@ static bool create_fake_toolchain(
 )
 {
     static const char *const TOOLS[] = {
-        "cmmcomp", "cpppp", "cppcomp", "appcomp", "asmcomp"
+        "cmmcomp", "cpppp", "cppcomp", "appcomp", "asmcomp", "gen_gtkw",
+        "iverilog", "vvp"
     };
     static const char *const HDL[] = {
         "addr_dec.v", "instr_dec.v", "processor.v", "core.v", "ula.v"
@@ -386,9 +388,13 @@ static bool fixture_create(
     char *temporary = mkdtemp(directory_template);
     char *source_directory = NULL;
     char *source_name = NULL;
+    const char *source_text;
     bool success = false;
 
     (void)memset(fixture, 0, sizeof(*fixture));
+    source_text = strcmp(language, "cmm") == 0
+        ? "#PRNAME processor\nvoid main() {}\n"
+        : "original YANC source\n";
     if (temporary == NULL) return false;
     fixture->base = strdup(temporary);
     if (fixture->base == NULL) return false;
@@ -413,7 +419,7 @@ static bool fixture_create(
         fixture->trace_path == NULL || source_directory == NULL ||
         fixture->include_path == NULL || fixture->source_path == NULL ||
         !ensure_directory(fixture->include_path) ||
-        !write_text(fixture->source_path, "original YANC source\n") ||
+        !write_text(fixture->source_path, source_text) ||
         !write_manifest(fixture, language, diagnostics) ||
         !create_fake_toolchain(fixture, tool_path) ||
         setenv("SOLAR_YANC_ROOT", fixture->toolchain_root, 1) != 0 ||
@@ -518,6 +524,9 @@ static bool success_artifacts_are_complete(
         regular_file_exists(compiler_result->artifacts.data_image_path) &&
         regular_file_exists(compiler_result->artifacts.instruction_image_path) &&
         regular_file_exists(compiler_result->artifacts.testbench_path) &&
+        regular_file_exists(
+            compiler_result->artifacts.instruction_translation_path
+        ) &&
         metadata != NULL && regular_file_exists(metadata) &&
         rtl != NULL && testbench != NULL &&
         strstr(rtl, ".solar/tmp/yanc") == NULL &&
@@ -1124,6 +1133,155 @@ cleanup:
     return failed;
 }
 
+static int test_waveform_layout_and_missing_helper(const char *tool_path)
+{
+    const char *name = "YANC GTKWave Assembly layout";
+    TestFixture fixture;
+    SolarProject project;
+    SolarCompilerResult compiler_result;
+    SolarResult result;
+    char *waveform = NULL;
+    char *layout = NULL;
+    char *found_layout = NULL;
+    char *layout_text = NULL;
+    char *formatter = NULL;
+    char *trace = NULL;
+    char *tool_bin = NULL;
+    char *saved_path = NULL;
+    char *test_path = NULL;
+    SolarTestResult test_result;
+    int failed = 0;
+
+    solar_project_init(&project);
+    solar_compiler_result_init(&compiler_result);
+    solar_test_result_init(&test_result);
+    if (!fixture_create(&fixture, "cmm", "pt", tool_path)) {
+        failed = fail_test(name, "could not create fixture");
+        goto cleanup;
+    }
+    if (!run_compile(&fixture, &project, &compiler_result, &result)) {
+        failed = fail_test(name, result.diagnostic.message);
+        goto cleanup;
+    }
+    waveform = join_path(fixture.project_root, ".solar/tmp/manual-wave.vcd");
+    if (waveform == NULL || !write_text(waveform, "fake VCD\n")) {
+        failed = fail_test(name, "could not create waveform fixture");
+        goto cleanup;
+    }
+    result = solar_compiler_prepare_waveform_layout(
+        &project, &compiler_result.artifacts, "generated", waveform, &layout
+    );
+    layout_text = layout == NULL ? NULL : read_text(layout);
+    trace = read_text(fixture.trace_path);
+    if (result.status != SOLAR_STATUS_OK || layout_text == NULL ||
+        strstr(layout_text, "{Assembly}") == NULL ||
+        strstr(layout_text, "C+-") != NULL ||
+        strstr(layout_text, "Variables") != NULL || trace == NULL ||
+        !trace_stage_contains(trace, "gen_gtkw", "\t--assembly-only\t") ||
+        !trace_stage_contains(
+            trace, "gen_gtkw", "\t.solar/tmp/manual-wave.vcd\t"
+        )) {
+        failed = fail_test(name, "Assembly-only layout was not prepared");
+        goto cleanup;
+    }
+    result = solar_compiler_find_waveform_layout(
+        &project, "generated", waveform, &found_layout
+    );
+    if (result.status != SOLAR_STATUS_OK || found_layout == NULL ||
+        strcmp(found_layout, layout) != 0) {
+        failed = fail_test(name, "prepared layout was not discoverable");
+        goto cleanup;
+    }
+    free(found_layout);
+    found_layout = NULL;
+    formatter = join_path(fixture.toolchain_root, "bin/gen_gtkw");
+    if (formatter == NULL || unlink(formatter) != 0) {
+        failed = fail_test(name, "could not remove optional formatter");
+        goto cleanup;
+    }
+    free(layout_text);
+    layout_text = NULL;
+    result = solar_compiler_prepare_waveform_layout(
+        &project, &compiler_result.artifacts, "generated", waveform,
+        &layout_text
+    );
+    if (result.status != SOLAR_STATUS_TOOL_MISSING || layout_text != NULL ||
+        layout == NULL || access(layout, F_OK) == 0) {
+        failed = fail_test(
+            name, "missing formatter did not remove the stale layout safely"
+        );
+        goto cleanup;
+    }
+    result = solar_compiler_find_waveform_layout(
+        &project, "generated", waveform, &found_layout
+    );
+    if (result.status != SOLAR_STATUS_OK || found_layout != NULL) {
+        failed = fail_test(name, "removed stale layout remained discoverable");
+        goto cleanup;
+    }
+    tool_bin = join_path(fixture.toolchain_root, "bin");
+    saved_path = getenv("PATH") == NULL ? NULL : strdup(getenv("PATH"));
+    if (tool_bin == NULL || saved_path == NULL) {
+        failed = fail_test(name, "could not prepare simulation PATH");
+        goto cleanup;
+    }
+    test_path = malloc(strlen(tool_bin) + strlen(saved_path) + 2U);
+    if (test_path == NULL) {
+        failed = fail_test(name, "could not allocate simulation PATH");
+        goto cleanup;
+    }
+    (void)snprintf(
+        test_path, strlen(tool_bin) + strlen(saved_path) + 2U,
+        "%s:%s", tool_bin, saved_path
+    );
+    if (setenv("PATH", test_path, 1) != 0) {
+        failed = fail_test(name, "could not select fake simulation tools");
+        goto cleanup;
+    }
+    result = solar_test_run_with_artifacts(
+        &project, "generated", NULL, &compiler_result.artifacts, &test_result
+    );
+    if (result.status != SOLAR_STATUS_OK || test_result.waveform_path == NULL ||
+        test_result.waveform_layout_path != NULL ||
+        test_result.waveform_layout_diagnostic.severity !=
+            SOLAR_DIAGNOSTIC_WARNING ||
+        strstr(
+            test_result.waveform_layout_diagnostic.message, "gen_gtkw"
+        ) == NULL) {
+        failed = fail_test(
+            name, "formatter fallback incorrectly failed the simulation"
+        );
+        (void)fprintf(
+            stderr,
+            "status=%d result=%s waveform=%s layout=%s warning=%d:%s\n",
+            (int)result.status, result.diagnostic.message,
+            test_result.waveform_path == NULL ? "(null)" :
+                test_result.waveform_path,
+            test_result.waveform_layout_path == NULL ? "(null)" :
+                test_result.waveform_layout_path,
+            (int)test_result.waveform_layout_diagnostic.severity,
+            test_result.waveform_layout_diagnostic.message
+        );
+    }
+
+cleanup:
+    if (saved_path != NULL) (void)setenv("PATH", saved_path, 1);
+    solar_test_result_free(&test_result);
+    free(test_path);
+    free(saved_path);
+    free(tool_bin);
+    free(trace);
+    free(formatter);
+    free(found_layout);
+    free(layout_text);
+    free(layout);
+    free(waveform);
+    solar_compiler_result_free(&compiler_result);
+    solar_project_free(&project);
+    fixture_free(&fixture);
+    return failed;
+}
+
 int main(int argc, char *argv[])
 {
     EnvironmentBackup environment;
@@ -1151,6 +1309,7 @@ int main(int argc, char *argv[])
     failures += test_missing_hdl_preserves_previous_build(tool_path);
     failures += test_build_context_reuses_generation(tool_path);
     failures += test_native_path_limit_prevents_tool_execution(tool_path);
+    failures += test_waveform_layout_and_missing_helper(tool_path);
     restore_environment(&environment);
     free(tool_path);
     return failures == 0 ? 0 : 1;

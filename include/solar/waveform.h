@@ -10,7 +10,22 @@ typedef enum {
     SOLAR_WAVEFORM_VIEWER_SURFER
 } SolarWaveformViewer;
 
+typedef struct {
+    SolarWaveformViewer viewer;
+    /* Borrowed optional paths used only while launching the viewer. */
+    const char *working_directory;
+    const char *layout_path;
+    bool interactive;
+} SolarWaveformOpenOptions;
+
 const char *solar_waveform_viewer_name(SolarWaveformViewer viewer);
+void solar_waveform_open_options_init(SolarWaveformOpenOptions *options);
+
+SolarResult solar_waveform_open_with_options(
+    const char *waveform_path,
+    const SolarWaveformOpenOptions *options,
+    bool *launched_out
+);
 
 /*
  * Launches the selected external viewer without waiting for its GUI process.

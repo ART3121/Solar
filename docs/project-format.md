@@ -166,6 +166,15 @@ ambiguous changes leave the original file untouched. If the last managed test
 disappears, scan removes a `default_test` that referred to that managed test.
 Defaults for explicit unmanaged tests remain user-owned.
 
+For format-2 CMM projects, `solar scan` instead locates exactly one regular
+`.cmm` file below `software/` (or an existing safe explicitly configured path),
+without following symlinks. It reads the active `#PRNAME` outside comments and
+strings, then synchronizes `[project].name`, `[compiler].source`,
+`[compiler].processor`, and `[synthesis].top`. The exact `#PRNAME` identifier is
+the source of truth. Zero or multiple sources and missing, duplicate,
+malformed, or unsafe directives are errors; the original manifest remains
+unchanged. C++ and direct Assembly configuration is not changed by scan.
+
 ## YANC format 2
 
 ```toml
@@ -220,7 +229,8 @@ YANC languages. Solar applies the locale option only to tools that support it.
 
 The configured processor uses letters, numbers, and underscores, beginning
 with a letter or underscore. It becomes a safe generated path and module/file
-name.
+name. For CMM, project validation also requires this value to match the source
+`#PRNAME`; run `solar scan` after changing the directive or source path.
 
 ## Supported syntax
 

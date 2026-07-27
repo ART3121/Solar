@@ -2083,6 +2083,21 @@ static SolarResult populate_generated_artifacts(
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
     result = processor_file_name(project, "_tb", &artifacts->testbench_top);
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    result = join_path(
+        workspace->temporary, "trad_opcode.txt",
+        &artifacts->instruction_translation_path
+    );
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    {
+        struct stat information;
+
+        if (lstat(artifacts->instruction_translation_path, &information) != 0 ||
+            !S_ISREG(information.st_mode) ||
+            access(artifacts->instruction_translation_path, R_OK) != 0) {
+            free(artifacts->instruction_translation_path);
+            artifacts->instruction_translation_path = NULL;
+        }
+    }
     result = append_hdl_sources(project, toolchain, workspace, artifacts);
     if (result.status != SOLAR_STATUS_OK) goto cleanup;
     result = solar_string_list_append_copy(
@@ -2247,6 +2262,321 @@ cleanup:
     return result;
 }
 
+typedef struct {
+    char *staging_relative;
+    char *final_relative;
+    char *staging_directory;
+    char *layout_staging;
+    char *translation_staging;
+    char *layout_final;
+    char *layout_final_relative;
+    char *translation_final;
+    char *translation_final_relative;
+    char *stdout_log;
+    char *stderr_log;
+} YancWaveformLayout;
+
+static void yanc_waveform_layout_free(YancWaveformLayout *layout)
+{
+    if (layout == NULL) return;
+    free(layout->staging_relative);
+    free(layout->final_relative);
+    free(layout->staging_directory);
+    free(layout->layout_staging);
+    free(layout->translation_staging);
+    free(layout->layout_final);
+    free(layout->layout_final_relative);
+    free(layout->translation_final);
+    free(layout->translation_final_relative);
+    free(layout->stdout_log);
+    free(layout->stderr_log);
+    (void)memset(layout, 0, sizeof(*layout));
+}
+
+static SolarResult make_yanc_waveform_layout_paths(
+    const SolarProject *project,
+    const char *test_name,
+    YancWaveformLayout *layout
+)
+{
+    char *test_temporary = NULL;
+    char *test_logs = NULL;
+    SolarResult result;
+
+    (void)memset(layout, 0, sizeof(*layout));
+    result = join_path(".solar/tmp/tests", test_name, &test_temporary);
+    if (result.status == SOLAR_STATUS_OK) {
+        result = join_path(
+            test_temporary, "waveform-layout", &layout->staging_relative
+        );
+    }
+    if (result.status == SOLAR_STATUS_OK) {
+        result = join_path(
+            ".solar/state/waveforms", test_name, &layout->final_relative
+        );
+    }
+    if (result.status == SOLAR_STATUS_OK) {
+        result = join_path(
+            project->root, layout->staging_relative,
+            &layout->staging_directory
+        );
+    }
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        layout->staging_directory, "layout.gtkw", &layout->layout_staging
+    );
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        layout->staging_directory, "trad_opcode.txt",
+        &layout->translation_staging
+    );
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        layout->final_relative, "layout.gtkw", &layout->layout_final_relative
+    );
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        project->root, layout->layout_final_relative, &layout->layout_final
+    );
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        layout->final_relative, "trad_opcode.txt",
+        &layout->translation_final_relative
+    );
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        project->root, layout->translation_final_relative,
+        &layout->translation_final
+    );
+    if (result.status == SOLAR_STATUS_OK) {
+        result = join_path(".solar/logs/tests", test_name, &test_logs);
+    }
+    if (result.status == SOLAR_STATUS_OK) result = join_path(
+        project->root, test_logs, &layout->stdout_log
+    );
+    if (result.status == SOLAR_STATUS_OK) {
+        char *directory = layout->stdout_log;
+
+        layout->stdout_log = NULL;
+        result = join_path(directory, "gen_gtkw.stdout.log", &layout->stdout_log);
+        if (result.status == SOLAR_STATUS_OK) result = join_path(
+            directory, "gen_gtkw.stderr.log", &layout->stderr_log
+        );
+        free(directory);
+    }
+    free(test_logs);
+    free(test_temporary);
+    if (result.status != SOLAR_STATUS_OK) yanc_waveform_layout_free(layout);
+    return result;
+}
+
+static SolarResult prepare_yanc_waveform_staging(
+    const SolarProject *project,
+    const SolarGeneratedArtifacts *artifacts,
+    const char *test_name,
+    const YancWaveformLayout *layout
+)
+{
+    char *log_relative = NULL;
+    bool removed = false;
+    SolarResult result = solar_filesystem_remove_generated_tree(
+        project->root, layout->staging_relative, &removed
+    );
+
+    if (result.status != SOLAR_STATUS_OK) return result;
+    result = solar_filesystem_prepare_generated_directory(
+        project->root, layout->staging_relative
+    );
+    if (result.status != SOLAR_STATUS_OK) return result;
+    result = solar_filesystem_prepare_generated_directory(
+        project->root, ".solar/state/waveforms"
+    );
+    if (result.status != SOLAR_STATUS_OK) return result;
+    result = join_path(".solar/logs/tests", test_name, &log_relative);
+    if (result.status == SOLAR_STATUS_OK) {
+        result = solar_filesystem_prepare_generated_directory(
+            project->root, log_relative
+        );
+    }
+    free(log_relative);
+    if (result.status != SOLAR_STATUS_OK) return result;
+    return copy_regular_file(
+        artifacts->instruction_translation_path,
+        layout->translation_staging
+    );
+}
+
+static SolarResult waveform_relative_path(
+    const SolarProject *project,
+    const char *waveform_path,
+    const char **relative_out
+)
+{
+    size_t root_length = strlen(project->root);
+
+    *relative_out = NULL;
+    if (strncmp(waveform_path, project->root, root_length) != 0 ||
+        waveform_path[root_length] != '/' ||
+        !solar_filesystem_is_safe_relative(waveform_path + root_length + 1U)) {
+        return solar_result_error(
+            SOLAR_STATUS_INVALID_ARGUMENT,
+            "YANC waveform is outside the active project",
+            "format only a registered project waveform"
+        );
+    }
+    *relative_out = waveform_path + root_length + 1U;
+    return solar_result_ok();
+}
+
+static SolarResult run_yanc_waveform_formatter(
+    const SolarProject *project,
+    const SolarYancToolchain *toolchain,
+    const char *waveform_path,
+    const YancWaveformLayout *layout
+)
+{
+    const char *waveform_relative = NULL;
+    const char *arguments[] = {
+        toolchain->gen_gtkw, "--assembly-only", NULL,
+        layout->layout_staging, layout->translation_final_relative,
+        layout->layout_final_relative, NULL
+    };
+    SolarProcessSpec specification = {0};
+    SolarProcessResult process;
+    SolarResult result = waveform_relative_path(
+        project, waveform_path, &waveform_relative
+    );
+
+    if (result.status != SOLAR_STATUS_OK) return result;
+    arguments[2] = waveform_relative;
+    specification.executable = toolchain->gen_gtkw;
+    specification.argv = arguments;
+    specification.working_directory = project->root;
+    specification.stdout_log_path = layout->stdout_log;
+    specification.stderr_log_path = layout->stderr_log;
+    solar_process_result_init(&process);
+    result = solar_runner_run(&specification, &process);
+    solar_process_result_free(&process);
+    if (result.status != SOLAR_STATUS_OK) {
+        solar_backend_add_log_context(
+            &result, "gen_gtkw", layout->stderr_log
+        );
+        return result;
+    }
+    return validate_native_artifact(
+        layout->layout_staging, "GTKWave Assembly layout", "gen_gtkw"
+    );
+}
+
+static SolarResult yanc_prepare_waveform_layout(
+    const SolarProject *project,
+    const SolarGeneratedArtifacts *artifacts,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
+)
+{
+    SolarYancToolchain toolchain;
+    YancWaveformLayout layout;
+    bool removed = false;
+    SolarResult result;
+
+    *layout_path_out = NULL;
+    solar_yanc_toolchain_init(&toolchain);
+    result = make_yanc_waveform_layout_paths(project, test_name, &layout);
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    if (artifacts->instruction_translation_path == NULL) {
+        result = solar_result_error(
+            SOLAR_STATUS_NOT_FOUND,
+            "YANC produced no Assembly opcode translation table",
+            "inspect the asmcomp log; the raw waveform remains available"
+        );
+        goto cleanup;
+    }
+    result = solar_yanc_resolve(project, &toolchain);
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    if (toolchain.gen_gtkw == NULL) {
+        result = solar_result_error(
+            SOLAR_STATUS_TOOL_MISSING,
+            "YANC waveform formatter is unavailable: gen_gtkw",
+            "use Solar's bundled YANC or an external root with gen_gtkw"
+        );
+        goto cleanup;
+    }
+    result = prepare_yanc_waveform_staging(
+        project, artifacts, test_name, &layout
+    );
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    result = run_yanc_waveform_formatter(
+        project, &toolchain, waveform_path, &layout
+    );
+    if (result.status != SOLAR_STATUS_OK) goto cleanup;
+    result = solar_filesystem_publish_generated_directory(
+        project->root, layout.staging_relative, layout.final_relative
+    );
+    if (result.status == SOLAR_STATUS_OK) {
+        *layout_path_out = layout.layout_final;
+        layout.layout_final = NULL;
+    }
+
+cleanup:
+    if (result.status != SOLAR_STATUS_OK && layout.final_relative != NULL) {
+        (void)solar_filesystem_remove_generated_tree(
+            project->root, layout.final_relative, &removed
+        );
+    }
+    if (layout.staging_relative != NULL) {
+        (void)solar_filesystem_remove_generated_tree(
+            project->root, layout.staging_relative, &removed
+        );
+    }
+    yanc_waveform_layout_free(&layout);
+    solar_yanc_toolchain_free(&toolchain);
+    return result;
+}
+
+static bool layout_is_current(
+    const YancWaveformLayout *layout,
+    const char *waveform_path
+)
+{
+    struct stat layout_information;
+    struct stat translation_information;
+    struct stat waveform_information;
+
+    if (lstat(layout->layout_final, &layout_information) != 0 ||
+        !S_ISREG(layout_information.st_mode) ||
+        access(layout->layout_final, R_OK) != 0 ||
+        lstat(layout->translation_final, &translation_information) != 0 ||
+        !S_ISREG(translation_information.st_mode) ||
+        access(layout->translation_final, R_OK) != 0 ||
+        stat(waveform_path, &waveform_information) != 0) {
+        return false;
+    }
+    if (layout_information.st_mtim.tv_sec != waveform_information.st_mtim.tv_sec) {
+        return layout_information.st_mtim.tv_sec >
+            waveform_information.st_mtim.tv_sec;
+    }
+    return layout_information.st_mtim.tv_nsec >=
+        waveform_information.st_mtim.tv_nsec;
+}
+
+static SolarResult yanc_find_waveform_layout(
+    const SolarProject *project,
+    const char *test_name,
+    const char *waveform_path,
+    char **layout_path_out
+)
+{
+    YancWaveformLayout layout;
+    SolarResult result;
+
+    *layout_path_out = NULL;
+    result = make_yanc_waveform_layout_paths(project, test_name, &layout);
+    if (result.status == SOLAR_STATUS_OK && layout_is_current(
+            &layout, waveform_path
+        )) {
+        *layout_path_out = layout.layout_final;
+        layout.layout_final = NULL;
+    }
+    yanc_waveform_layout_free(&layout);
+    return result;
+}
+
 static SolarResult yanc_compile(
     const SolarProject *project,
     SolarCompilerResult *compiler_result
@@ -2323,5 +2653,7 @@ cleanup:
 
 const SolarCompilerBackend SOLAR_YANC_COMPILER_BACKEND = {
     .name = "yanc",
-    .compile = yanc_compile
+    .compile = yanc_compile,
+    .prepare_waveform_layout = yanc_prepare_waveform_layout,
+    .find_waveform_layout = yanc_find_waveform_layout
 };

@@ -9,6 +9,19 @@ typedef struct {
         const SolarProject *project,
         SolarCompilerResult *compiler_result
     );
+    SolarResult (*prepare_waveform_layout)(
+        const SolarProject *project,
+        const SolarGeneratedArtifacts *artifacts,
+        const char *test_name,
+        const char *waveform_path,
+        char **layout_path_out
+    );
+    SolarResult (*find_waveform_layout)(
+        const SolarProject *project,
+        const char *test_name,
+        const char *waveform_path,
+        char **layout_path_out
+    );
 } SolarCompilerBackend;
 
 extern const SolarCompilerBackend SOLAR_YANC_COMPILER_BACKEND;
